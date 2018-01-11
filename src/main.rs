@@ -4,6 +4,8 @@ extern crate gfx_window_glutin;
 extern crate glutin;
 extern crate image;
 
+use std::time::SystemTime;
+
 use gfx::Device;
 use gfx::traits::FactoryExt;
 use gfx_window_glutin as gfx_glutin;
@@ -35,8 +37,8 @@ pub fn main() {
     // Define a window builder
     let builder = glutin::WindowBuilder::new()
         .with_title("gfx-rs-image-test".to_string())
-        .with_dimensions(800, 600)
-        .with_vsync();
+        .with_dimensions(800, 600);
+        // .with_vsync();
 
     // Initialize glutin
     let (
@@ -81,6 +83,9 @@ pub fn main() {
     let mut running = true;
     let mut update = false;
     let mut dimentions = (800.0, 600.0);
+
+    let mut frame = 0;
+    let mut report_next = SystemTime::now();
 
     // Keep rendering until we're done
     while running {
@@ -128,6 +133,14 @@ pub fn main() {
         window.swap_buffers().unwrap();
 
         device.cleanup();
+
+        // Count frames
+        frame += 1;
+        if report_next.elapsed().unwrap().as_secs() >= 1 {
+            println!("FPS: {}", frame);
+            frame = 0;
+            report_next = SystemTime::now();
+        }
     }
 }
 
