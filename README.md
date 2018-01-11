@@ -5,6 +5,8 @@ renderer in [Rust][rust], for use in a high performance pixelflut server.
 **Note:** This is currently an experiment, and is heavily tested with.
 This prototype renderer will be implemented in a quick server if successful. 
 
+[→ pixelpwnr (client)](https://github.com/timvisee/pixelpwnr)
+
 ## Features
 * Blazingly fast pixelflut rendering
 * GPU accelerated
