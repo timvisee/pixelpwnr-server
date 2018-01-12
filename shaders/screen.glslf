@@ -10,12 +10,6 @@ void main() {
     // Extract pixel data
     vec3 pixels = texture(t_Image, v_Uv).rgb;
 
-    // Draw
-    if(pixels == vec3(0.0)) {
-        // No image found, draw the color
-        Target0 = v_Color;
-    } else {
-        // Draw the image pixels
-        Target0 = vec4(pixels, 1.0);
-    }
+    // Draw the image pixels
+    Target0 = vec4(pixels, 1.0);
 }
