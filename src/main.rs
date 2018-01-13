@@ -66,16 +66,23 @@ pub fn main() {
     let (vertex_buffer, mut slice) = factory
         .create_vertex_buffer_with_slice(&vertices, &*indices);
 
-    // Load the screen texture
-    let texture = load_texture(&mut factory, "assets/test.png");
+    // Load image data
+    let (data1, kind1) = load_image("assets/test.png");
+    let (data2, kind2) = load_image("assets/other.png");
 
-    // Create an image sampler
-    let sampler = factory.create_sampler_linear();
+    // Load a base texture
+    let base_texture = create_texture(&mut factory, &data1, kind1);
+
+    // Load a default image
+    let base_img = (
+        base_texture,
+        factory.create_sampler_linear()
+    );
 
     // Build pipe data
     let mut data = pipe::Data {
         vbuf: vertex_buffer,
-        image: (texture, sampler),
+        image: base_img,
         out: main_color,
     };
 
@@ -84,11 +91,26 @@ pub fn main() {
     let mut update = false;
     let mut dimentions = (800.0, 600.0);
 
+    // FPS counting
     let mut frame = 0;
     let mut report_next = SystemTime::now();
 
     // Keep rendering until we're done
     while running {
+        // Constantly flip textures (test)
+        if frame % 2 == 0 {
+            data.image = (
+                create_texture(&mut factory, &data1, kind1),
+                factory.create_sampler_linear(),
+            );
+        } else {
+            // let data2 = vec![0x00u8; 800*600*4];
+            data.image = (
+                create_texture(&mut factory, &data2, kind2),
+                factory.create_sampler_linear(),
+            );
+        }
+
         // Update graphics when required
         if update {
             let (vertices, indices) = create_vertices_indices();
@@ -144,12 +166,9 @@ pub fn main() {
     }
 }
 
-/// Load a texture from the given `path`.
-fn load_texture<F, R>(factory: &mut F, path: &str)
-    -> gfx::handle::ShaderResourceView<R, [f32; 4]>
-    where
-        F: gfx::Factory<R>,
-        R: gfx::Resources,
+/// Load the image data from the given path
+fn load_image(path: &str)
+    -> (Vec<u8>, gfx::texture::Kind)
 {
     // Ope the image from the given path
     let img = image::open(path).unwrap().to_rgba();
@@ -159,11 +178,42 @@ fn load_texture<F, R>(factory: &mut F, path: &str)
     let kind = gfx::texture::Kind::D2(
         width as u16,
         height as u16,
-        gfx::texture::AaMode::Single
+        gfx::texture::AaMode::Single,
     );
 
+    (img.into_vec(), kind)
+}
+
+/// Load a texture from the given `path`.
+fn create_texture<F, R>(factory: &mut F, data: &[u8], kind: gfx::texture::Kind)
+    -> gfx::handle::ShaderResourceView<R, [f32; 4]>
+    where
+        F: gfx::Factory<R>,
+        R: gfx::Resources,
+{
+    // // Ope the image from the given path
+    // let img = image::open(path).unwrap().to_rgba();
+    // let (width, height) = img.dimensions();
+
+    // // Define the texture kind
+    // let kind = gfx::texture::Kind::D2(
+    //     width as u16,
+    //     height as u16,
+    //     gfx::texture::AaMode::Single,
+    // );
+
     // Create a GPU texture
-    let (_, view) = factory.create_texture_immutable_u8::<ColorFormat>(kind, &[&img]).unwrap();
+    let (_, view) = factory.create_texture_immutable_u8::<ColorFormat>(
+        kind,
+        &[data],
+    ).unwrap();
+
+    // let (texture, view, target) = factory.create_render_target::<ColorFormat>(
+    //     width as u16,
+    //     height as u16,
+    // ).unwrap();
+
+    // println!("INF: {:?}", texture.get_info());
 
     view
 }
