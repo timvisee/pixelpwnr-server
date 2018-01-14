@@ -1,9 +1,8 @@
 #[macro_use]
 extern crate gfx;
 extern crate gfx_window_glutin;
-extern crate glutin;
-extern crate image;
-
+extern crate glutin; extern crate image; 
+use std::sync::RwLock;
 use std::time::SystemTime;
 
 use gfx::Device;
@@ -95,8 +94,38 @@ pub fn main() {
     let mut frame = 0;
     let mut report_next = SystemTime::now();
 
+    // Build a pixel map
+    let set: Vec<Vec<RwLock<(u8, u8, u8, u8)>>> =
+        (0..600).map(|_|
+            (0..800).map(|_|
+                RwLock::new((0u8, 0u8, 0u8, 0u8))
+            ).collect()
+        ).collect();
+
     // Keep rendering until we're done
     while running {
+        // Build an iterator over the data structure
+        let full_iter = set
+            .iter()
+            .flat_map(|a|
+                a.iter()
+                    .flat_map(|p| {
+                        // Read from the pixel
+                        let p = p.read().unwrap();
+
+                        // Build an iterator over the cell values
+                        vec![
+                            p.0.clone(),
+                            p.1.clone(),
+                            p.2.clone(),
+                            p.3.clone(),
+                        ].into_iter()
+                    })
+            );
+
+        // Take a snapshot
+        let snapshot: Vec<u8> = full_iter.collect();
+
         // Constantly flip textures (test)
         if frame % 2 == 0 {
             data.image = (
@@ -106,7 +135,7 @@ pub fn main() {
         } else {
             // let data2 = vec![0x00u8; 800*600*4];
             data.image = (
-                create_texture(&mut factory, &data2, kind2),
+                create_texture(&mut factory, &snapshot, kind2),
                 factory.create_sampler_linear(),
             );
         }
