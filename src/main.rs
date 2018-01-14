@@ -95,17 +95,26 @@ pub fn main() {
     let mut report_next = SystemTime::now();
 
     // Build a pixel map
-    let set: Vec<Vec<RwLock<(u8, u8, u8, u8)>>> =
+    let mut pixelmap: Vec<Vec<RwLock<(u8, u8, u8, u8)>>> =
         (0..600).map(|_|
             (0..800).map(|_|
                 RwLock::new((0u8, 0u8, 0u8, 0u8))
             ).collect()
         ).collect();
 
+    // Make pixels at row 10 white
+    pixelmap[10].iter().for_each(|pixel| {
+        let mut pixel = pixel.write().unwrap();
+        pixel.0 = 255;
+        pixel.1 = 255;
+        pixel.2 = 255;
+        pixel.3 = 255;
+    });
+
     // Keep rendering until we're done
     while running {
         // Build an iterator over the data structure
-        let full_iter = set
+        let full_iter = pixelmap
             .iter()
             .flat_map(|a|
                 a.iter()
