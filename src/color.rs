@@ -51,7 +51,7 @@ impl Color {
 
         // Parse the hexadecimal value, and construct a color
         u32::from_str_radix(value, 16)
-            .map(|raw| Color::new(raw))
+            .map(|raw| Color::new(raw.to_be()))
     }
 
     /// Get the raw color value, as single u32.
