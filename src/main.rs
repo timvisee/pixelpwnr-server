@@ -5,6 +5,9 @@ extern crate gfx;
 extern crate gfx_window_glutin;
 extern crate glutin;
 extern crate image;
+#[macro_use]
+extern crate lazy_static;
+
 
 mod color;
 mod pixelmap;
@@ -12,6 +15,7 @@ mod pixelmap;
 use std::time::SystemTime;
 
 use gfx::Device;
+use gfx::texture::{AaMode, Kind};
 use gfx::traits::FactoryExt;
 use gfx_window_glutin as gfx_glutin;
 use glutin::VirtualKeyCode;
@@ -44,7 +48,7 @@ pub fn main() {
 
     // Define a window builder
     let builder = glutin::WindowBuilder::new()
-        .with_title("gfx-rs-image-test".to_string())
+        .with_title("pixelpwnr-render-test".to_string())
         .with_dimensions(800, 600);
         // .with_vsync();
 
@@ -54,7 +58,7 @@ pub fn main() {
         mut device,
         mut factory,
         main_color,
-        mut main_depth
+        mut main_depth,
     ) = gfx_glutin::init::<ColorFormat, DepthFormat>(builder, &events_loop);
 
     // Create the command encoder
@@ -74,23 +78,24 @@ pub fn main() {
     let (vertex_buffer, mut slice) = factory
         .create_vertex_buffer_with_slice(&vertices, &*indices);
 
-    // Load image data
-    let (data1, kind1) = load_image("assets/test.png");
-    let (data2, kind2) = load_image("assets/other.png");
+    // Build a pixelmap
+    let mut pixelmap = Pixelmap::new(800, 600);
+    pixelmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
+    pixelmap.set_pixel(20, 20, Color::from_hex("FF00FFFF").unwrap());
 
-    // Load a base texture
-    let base_texture = create_texture(&mut factory, &data1, kind1);
+    // Define the texture kind
+    let texture_kind = Kind::D2(800, 600, AaMode::Single);
 
-    // Load a default image
-    let base_img = (
-        base_texture,
+    // Create a base image
+    let base_image = (
+        create_texture(&mut factory, pixelmap.as_bytes(), texture_kind),
         factory.create_sampler_linear()
     );
 
     // Build pipe data
     let mut data = pipe::Data {
         vbuf: vertex_buffer,
-        image: base_img,
+        image: base_image,
         out: main_color,
     };
 
@@ -103,24 +108,13 @@ pub fn main() {
     let mut frame = 0;
     let mut report_next = SystemTime::now();
 
-    // Build a pixelmap
-    let mut pixelmap = Pixelmap::new(800, 600, 4);
-    pixelmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
-
     // Keep rendering until we're done
     while running {
-        // Constantly flip textures (test)
-        if frame % 2 == 0 {
-            data.image = (
-                create_texture(&mut factory, pixelmap.as_bytes(), kind1),
-                factory.create_sampler_linear(),
-            );
-        } else {
-            data.image = (
-                create_texture(&mut factory, pixelmap.as_bytes(), kind2),
-                factory.create_sampler_linear(),
-            );
-        }
+        // Create a texture with the new data, set it to upload
+        data.image = (
+            create_texture(&mut factory, pixelmap.as_bytes(), texture_kind),
+            factory.create_sampler_linear(),
+        );
 
         // Update graphics when required
         if update {
@@ -175,24 +169,6 @@ pub fn main() {
             report_next = SystemTime::now();
         }
     }
-}
-
-/// Load the image data from the given path
-fn load_image(path: &str)
-    -> (Vec<u8>, gfx::texture::Kind)
-{
-    // Ope the image from the given path
-    let img = image::open(path).unwrap().to_rgba();
-    let (width, height) = img.dimensions();
-
-    // Define the texture kind
-    let kind = gfx::texture::Kind::D2(
-        width as u16,
-        height as u16,
-        gfx::texture::AaMode::Single,
-    );
-
-    (img.into_vec(), kind)
 }
 
 /// Load a texture from the given `path`.
