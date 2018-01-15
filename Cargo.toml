@@ -8,6 +8,8 @@ image = "0.17"
 gfx = "0.16"
 gfx_window_glutin = "0.16"
 glutin = "0.8"
+lazy_static = "1.0"
 
-[profile.release]
-lto = true
+# TODO: re-enable this at release 
+# [profile.release]
+# lto = true
