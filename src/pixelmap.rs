@@ -89,6 +89,14 @@ impl Pixelmap {
     /// This data may be used to send to the GPU, as raw texture buffer, for
     /// rendering.
     pub fn as_bytes(&self) -> &[u8] {
+        // The following code transmutes the raw slice bytes from the
+        // `[u32; size]` type into `[u8; size * 4]`. Cloning the data array
+        // and casting each raw value to 4 u8 bytes if a very expensive
+        // operation to do each frame for such a big array of pixels.
+        // Transmuting is considered unsafe, but usually is about a 1000 times
+        // faster resulting in insane performance gains. This unsafe bit of
+        // code is desirable over safe code that is enormously slower.
+        // The implementation below is memory safe.
         unsafe {
             mem::transmute(self.as_slice())
         }
