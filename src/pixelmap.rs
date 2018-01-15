@@ -1,5 +1,14 @@
+use std::mem;
+
+use super::color::Color;
+
+// Align to at least 4 bytes in memory, which aligns the i32 map
+// This greatly improves the chance of raw i32 operations being atomic,
+// which is preferred bahaviour for this data structure.
+#[repr(align(4))]
 pub struct Pixelmap {
-    map: Vec<u8>,
+    map: Vec<u32>,
+
     width: usize,
     channels: usize,
 }
@@ -7,25 +16,34 @@ pub struct Pixelmap {
 impl Pixelmap {
     pub fn new(width: usize, height: usize, channels: usize) -> Self {
         Pixelmap {
-            map: vec![255u8; width * height * channels],
+            map: vec![0x000000FFu32.to_be(); width * height],
             width,
             channels,
         }
     }
 
-    pub fn set_pixel(&mut self, x: usize, y: usize, r: u8, g: u8, b: u8) {
-        let offset = self.pixel_offset(x, y);
-
-        self.map[offset] = r;
-        self.map[offset + 1] = g;
-        self.map[offset + 2] = b;
+    pub fn set_pixel(&mut self, x: usize, y: usize, color: Color) {
+        self.set_pixel_raw(x, y, color.to_raw());
     }
 
-    fn pixel_offset(&self, x: usize, y: usize) -> usize {
-        (y * self.width + x) * self.channels
+    pub fn set_pixel_raw(&mut self, x: usize, y: usize, raw: u32) {
+        // Determine the pixel index
+        let index = self.pixel_index(x, y);
+
+        // Set the value
+        self.map[index] = raw;
     }
 
-    pub fn render_data(&self) -> &[u8] {
-        &self.map
+    fn pixel_index(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            mem::transmute(self.map.as_slice())
+        }
     }
 }
+
+unsafe impl Send for Pixelmap {}
+unsafe impl Sync for Pixelmap {}

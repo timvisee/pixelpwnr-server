@@ -1,8 +1,14 @@
+#![feature(repr_align, attr_literals)]
+
 #[macro_use]
 extern crate gfx;
 extern crate gfx_window_glutin;
-extern crate glutin; extern crate image; 
-use std::sync::RwLock;
+extern crate glutin;
+extern crate image;
+
+mod color;
+mod pixelmap;
+
 use std::time::SystemTime;
 
 use gfx::Device;
@@ -10,6 +16,9 @@ use gfx::traits::FactoryExt;
 use gfx_window_glutin as gfx_glutin;
 use glutin::VirtualKeyCode;
 use glutin::WindowEvent::*;
+
+use color::Color;
+use pixelmap::Pixelmap;
 
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -94,57 +103,21 @@ pub fn main() {
     let mut frame = 0;
     let mut report_next = SystemTime::now();
 
-    // Build a pixel map
-    let mut pixelmap: Vec<Vec<RwLock<(u8, u8, u8, u8)>>> =
-        (0..600).map(|_|
-            (0..800).map(|_|
-                RwLock::new((0u8, 0u8, 0u8, 0u8))
-            ).collect()
-        ).collect();
-
-    // Make pixels at row 10 white
-    pixelmap[10].iter().for_each(|pixel| {
-        let mut pixel = pixel.write().unwrap();
-        pixel.0 = 255;
-        pixel.1 = 255;
-        pixel.2 = 255;
-        pixel.3 = 255;
-    });
+    // Build a pixelmap
+    let mut pixelmap = Pixelmap::new(800, 600, 4);
+    pixelmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
 
     // Keep rendering until we're done
     while running {
-        // Build an iterator over the data structure
-        let full_iter = pixelmap
-            .iter()
-            .flat_map(|a|
-                a.iter()
-                    .flat_map(|p| {
-                        // Read from the pixel
-                        let p = p.read().unwrap();
-
-                        // Build an iterator over the cell values
-                        vec![
-                            p.0.clone(),
-                            p.1.clone(),
-                            p.2.clone(),
-                            p.3.clone(),
-                        ].into_iter()
-                    })
-            );
-
-        // Take a snapshot
-        let snapshot: Vec<u8> = full_iter.collect();
-
         // Constantly flip textures (test)
         if frame % 2 == 0 {
             data.image = (
-                create_texture(&mut factory, &data1, kind1),
+                create_texture(&mut factory, pixelmap.as_bytes(), kind1),
                 factory.create_sampler_linear(),
             );
         } else {
-            // let data2 = vec![0x00u8; 800*600*4];
             data.image = (
-                create_texture(&mut factory, &snapshot, kind2),
+                create_texture(&mut factory, pixelmap.as_bytes(), kind2),
                 factory.create_sampler_linear(),
             );
         }
