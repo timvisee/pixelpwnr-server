@@ -9,7 +9,7 @@ extern crate image;
 extern crate lazy_static;
 
 mod color;
-mod pixelmap;
+mod pixmap;
 
 use std::time::SystemTime;
 
@@ -21,7 +21,7 @@ use glutin::VirtualKeyCode;
 use glutin::WindowEvent::*;
 
 use color::Color;
-use pixelmap::Pixelmap;
+use pixmap::Pixmap;
 
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -78,16 +78,16 @@ pub fn main() {
         .create_vertex_buffer_with_slice(&vertices, &*indices);
 
     // Build a pixelmap
-    let mut pixelmap = Pixelmap::new(800, 600);
-    pixelmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
-    pixelmap.set_pixel(20, 20, Color::from_hex("FF00FFFF").unwrap());
+    let mut pixmap = Pixmap::new(800, 600);
+    pixmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
+    pixmap.set_pixel(20, 20, Color::from_hex("FF00FFFF").unwrap());
 
     // Define the texture kind
     let texture_kind = Kind::D2(800, 600, AaMode::Single);
 
     // Create a base image
     let base_image = (
-        create_texture(&mut factory, pixelmap.as_bytes(), texture_kind),
+        create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
         factory.create_sampler_linear()
     );
 
@@ -111,7 +111,7 @@ pub fn main() {
     while running {
         // Create a texture with the new data, set it to upload
         data.image = (
-            create_texture(&mut factory, pixelmap.as_bytes(), texture_kind),
+            create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
             factory.create_sampler_linear(),
         );
 

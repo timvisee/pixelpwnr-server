@@ -4,7 +4,7 @@ use super::color::Color;
 
 lazy_static! {
     /// The default color value for each pixel
-    static ref DEFAULT_PIXEL: u32 = 0x000000FFu32.to_be();
+    static ref DEFAULT_PIXEL: u32 = Color::black().to_raw();
 }
 
 /// A struct representing a pixelmap for pixelflut.
@@ -31,25 +31,25 @@ lazy_static! {
 /// Important: this data structure is considered unsafe, but is perfectly
 /// usable for pixelflut applications.
 #[repr(align(4))]
-pub struct Pixelmap {
+pub struct Pixmap {
     /// A map with a raw color value for each pixel in the map, where each
     /// pixel consists of 4 bytes in a single u32 for each color channel.
     map: Vec<u32>,
 
-    /// The width of the pixelmap.
-    width: usize,
+    /// Pixelmap dimentions, width and height
+    dimentions: (usize, usize),
 }
 
-impl Pixelmap {
+impl Pixmap {
     /// Construct a new 
     pub fn new(width: usize, height: usize) -> Self {
-        Pixelmap {
+        Pixmap {
             // Build a pixel map, with the default value and the proper sizeto
             // fit each pixel
             map: vec![*DEFAULT_PIXEL; width * height],
 
-            // The width of the pixelmap
-            width,
+            // Set the dimentions
+            dimentions: (width, height),
         }
     }
 
@@ -69,7 +69,12 @@ impl Pixelmap {
 
     /// Get the index a pixel is at, for the given coordinate.
     fn pixel_index(&self, x: usize, y: usize) -> usize {
-        y * self.width + x
+        y * self.dimentions.0 + x
+    }
+
+    /// Get the pixelmap dimentions, width and height.
+    pub fn dimentions(&self) -> (usize, usize) {
+        self.dimentions
     }
 
     /// Get the pixelmap data, as slice with the raw color value of each
@@ -103,5 +108,5 @@ impl Pixelmap {
     }
 }
 
-unsafe impl Send for Pixelmap {}
-unsafe impl Sync for Pixelmap {}
+unsafe impl Send for Pixmap {}
+unsafe impl Sync for Pixmap {}

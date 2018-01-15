@@ -54,6 +54,11 @@ impl Color {
             .map(|raw| Color::new(raw.to_be()))
     }
 
+    /// A black color, with the default alpha.
+    pub fn black() -> Self {
+        Color::from_rgb(0, 0, 0)
+    }
+
     /// Get the raw color value, as single u32.
     pub fn to_raw(&self) -> u32 {
         self.value
