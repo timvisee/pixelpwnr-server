@@ -72,11 +72,9 @@ pub fn main() {
         pipe::new(),
     ).unwrap();
 
-    // Create the vertices and indices, define the vertex buffer
-    let quad = create_quad();
-    let (vertices, indices) = (quad.vertices(), quad.indices());
-    let (vertex_buffer, mut slice) = factory
-        .create_vertex_buffer_with_slice(&vertices, &*indices);
+    // Create a full screen quad, plane, that is rendered on
+    let plane = create_quad();
+    let (vertex_buffer, mut slice) = plane.create_vertex_buffer(&mut factory);
 
     // Build a pixelmap
     let mut pixmap = Pixmap::new(800, 600);
@@ -119,14 +117,11 @@ pub fn main() {
         // Update graphics when required
         if update {
             // TODO: can we remove this?
-            let quad = create_quad();
-            let (vertices, indices) = (quad.vertices(), quad.indices());
-            let (vertex_buff, sl) = factory
-                .create_vertex_buffer_with_slice(&vertices, &*indices);
+            let (vertex_buffer, slice_new) = plane.create_vertex_buffer(&mut factory);
 
             // Redefine the vertex buffer and slice
-            data.vbuf = vertex_buff;
-            slice = sl;
+            data.vbuf = vertex_buffer;
+            slice = slice_new;
 
             // We've successfully updated
             update = false

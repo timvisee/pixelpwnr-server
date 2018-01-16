@@ -1,3 +1,7 @@
+use gfx::{Resources, Slice};
+use gfx::handle::Buffer;
+use gfx::traits::FactoryExt;
+
 use super::vertex::Vertex;
 
 // A 3D model for use on the GPU defined as vertices and indices.
@@ -18,13 +22,17 @@ impl Model {
         }
     }
 
-    /// Get a reference to the vertices in this model.
-    pub fn vertices(&self) -> &[Vertex] {
-        &self.vertices
-    }
-
-    /// Get a reference to the indices in this model.
-    pub fn indices(&self) -> &[u16] {
-        &self.indices
+    /// Create an immutable vertex buffer from the model vertices, together
+    /// with a slice from the model indices.
+    pub fn create_vertex_buffer<F, R>(&self, factory: &mut F)
+        -> (Buffer<R, Vertex>, Slice<R>)
+        where
+            F: FactoryExt<R>,
+            R: Resources,
+    {
+        factory.create_vertex_buffer_with_slice(
+            &self.vertices,
+            &*self.indices,
+        )
     }
 }
