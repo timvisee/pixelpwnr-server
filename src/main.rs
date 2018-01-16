@@ -9,7 +9,10 @@ extern crate image;
 extern crate lazy_static;
 
 mod color;
+mod model;
 mod pixmap;
+mod primitive;
+mod vertex;
 
 use std::time::SystemTime;
 
@@ -21,7 +24,9 @@ use glutin::VirtualKeyCode;
 use glutin::WindowEvent::*;
 
 use color::Color;
+use vertex::Vertex;
 use pixmap::Pixmap;
+use primitive::create_quad;
 
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -29,11 +34,6 @@ pub type ColorFormat = gfx::format::Srgba8;
 pub type DepthFormat = gfx::format::DepthStencil;
 
 gfx_defines! {
-    vertex Vertex {
-        pos: [f32; 2] = "a_Pos",
-        uv: [f32; 2] = "a_Uv",
-    }
-
     pipeline pipe {
         vbuf: gfx::VertexBuffer<Vertex> = (),
         image: gfx::TextureSampler<[f32; 4]> = "t_Image",
@@ -73,7 +73,8 @@ pub fn main() {
     ).unwrap();
 
     // Create the vertices and indices, define the vertex buffer
-    let (vertices, indices) = create_vertices_indices();
+    let quad = create_quad();
+    let (vertices, indices) = (quad.vertices(), quad.indices());
     let (vertex_buffer, mut slice) = factory
         .create_vertex_buffer_with_slice(&vertices, &*indices);
 
@@ -117,7 +118,9 @@ pub fn main() {
 
         // Update graphics when required
         if update {
-            let (vertices, indices) = create_vertices_indices();
+            // TODO: can we remove this?
+            let quad = create_quad();
+            let (vertices, indices) = (quad.vertices(), quad.indices());
             let (vertex_buff, sl) = factory
                 .create_vertex_buffer_with_slice(&vertices, &*indices);
 
@@ -202,23 +205,4 @@ fn create_texture<F, R>(factory: &mut F, data: &[u8], kind: gfx::texture::Kind)
     // println!("INF: {:?}", texture.get_info());
 
     view
-}
-
-/// Create the vertices and indices for a full screen quad.
-pub fn create_vertices_indices() -> (Vec<Vertex>, Vec<u16>) {
-    // Build the vertices
-    let vertices = vec![
-        Vertex { pos: [ 1f32, -1f32], uv: [1.0, 1.0] },
-        Vertex { pos: [-1f32, -1f32], uv: [0.0, 1.0] },
-        Vertex { pos: [-1f32,  1f32], uv: [0.0, 0.0] },
-        Vertex { pos: [ 1f32,  1f32], uv: [1.0, 0.0] },
-    ];
-
-    // Define the vertex indices
-    let indices = vec![
-        0, 1, 2,
-        2, 3, 0,
-    ];
-
-    (vertices, indices)
 }
