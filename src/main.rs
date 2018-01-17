@@ -165,33 +165,15 @@ pub fn main() {
 /// Load a texture from the given `path`.
 fn create_texture<F, R>(factory: &mut F, data: &[u8], kind: gfx::texture::Kind)
     -> gfx::handle::ShaderResourceView<R, [f32; 4]>
-    where
-        F: gfx::Factory<R>,
-        R: gfx::Resources,
+where
+    F: gfx::Factory<R>,
+    R: gfx::Resources,
 {
-    // // Ope the image from the given path
-    // let img = image::open(path).unwrap().to_rgba();
-    // let (width, height) = img.dimensions();
-
-    // // Define the texture kind
-    // let kind = gfx::texture::Kind::D2(
-    //     width as u16,
-    //     height as u16,
-    //     gfx::texture::AaMode::Single,
-    // );
-
     // Create a GPU texture
     let (_, view) = factory.create_texture_immutable_u8::<ColorFormat>(
         kind,
         &[data],
     ).unwrap();
-
-    // let (texture, view, target) = factory.create_render_target::<ColorFormat>(
-    //     width as u16,
-    //     height as u16,
-    // ).unwrap();
-
-    // println!("INF: {:?}", texture.get_info());
 
     view
 }
