@@ -9,12 +9,11 @@ extern crate image;
 extern crate lazy_static;
 
 mod color;
+mod fps_counter;
 mod model;
 mod pixmap;
 mod primitive;
 mod vertex;
-
-use std::time::SystemTime;
 
 use gfx::Device;
 use gfx::texture::{AaMode, Kind};
@@ -24,9 +23,10 @@ use glutin::VirtualKeyCode;
 use glutin::WindowEvent::*;
 
 use color::Color;
-use vertex::Vertex;
+use fps_counter::FpsCounter;
 use pixmap::Pixmap;
 use primitive::create_quad;
+use vertex::Vertex;
 
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
@@ -102,9 +102,8 @@ pub fn main() {
     let mut update = false;
     let mut dimentions = (800.0, 600.0);
 
-    // FPS counting
-    let mut frame = 0;
-    let mut report_next = SystemTime::now();
+    // Create an FPS counter
+    let mut fps = FpsCounter::new();
 
     // Keep rendering until we're done
     while running {
@@ -158,13 +157,8 @@ pub fn main() {
 
         device.cleanup();
 
-        // Count frames
-        frame += 1;
-        if report_next.elapsed().unwrap().as_secs() >= 1 {
-            println!("FPS: {}", frame);
-            frame = 0;
-            report_next = SystemTime::now();
-        }
+        // Tick the FPS counter
+        fps.tick();
     }
 }
 

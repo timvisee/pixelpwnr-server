@@ -9,6 +9,7 @@ gfx = "0.16"
 gfx_window_glutin = "0.16"
 glutin = "0.8"
 lazy_static = "1.0"
+time = "0.1"
 
 # TODO: re-enable this at release 
 # [profile.release]
