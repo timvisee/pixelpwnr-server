@@ -72,11 +72,6 @@ impl Pixmap {
         y * self.dimentions.0 + x
     }
 
-    /// Get the pixelmap dimentions, width and height.
-    pub fn dimentions(&self) -> (usize, usize) {
-        self.dimentions
-    }
-
     /// Get the pixelmap data, as slice with the raw color value of each
     /// pixel.
     ///
