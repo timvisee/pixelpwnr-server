@@ -15,7 +15,7 @@ This prototype renderer will be implemented in a quick server if successful.
 * ...
 
 ## Requirements
-* Rust 1.24
+* Rust nightly (v1.24 or higher)
 
 ## License
 This project is released under the GNU GPL-3.0 license.
