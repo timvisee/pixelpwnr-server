@@ -14,6 +14,9 @@ This prototype renderer will be implemented in a quick server if successful.
 * Linux, Windows and macOS
 * ...
 
+## Requirements
+* Rust 1.24
+
 ## License
 This project is released under the GNU GPL-3.0 license.
 Check out the [LICENSE](LICENSE) file for more information.

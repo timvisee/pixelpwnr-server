@@ -1,4 +1,4 @@
-#![feature(repr_align, attr_literals)]
+#![feature(attr_literals)]
 
 #[macro_use]
 extern crate gfx;
