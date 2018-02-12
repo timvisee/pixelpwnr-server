@@ -1,0 +1,7 @@
+[package]
+name = "pixelpwnr-server"
+version = "0.1.0"
+authors = ["timvisee <timvisee@gmail.com>"]
+
+[dependencies]
+pixelpwnr-render = { path = "../pixelpwnr-render" }
