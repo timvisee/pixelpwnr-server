@@ -4,11 +4,5 @@ version = "0.1.0"
 authors = ["timvisee <timvisee@gmail.com>"]
 
 [dependencies]
-bytes = "0.4"
-futures = "0.1.16"
 pixelpwnr-render = { path = "../pixelpwnr-render" }
 # pixelpwnr-render = { git = "https://github.com/timvisee/pixelpwnr-render.git" }
-tokio = "0.1.1"
-tokio-io = "0.1.5"
-tokio-proto = "0.1.1"
-tokio-service = "0.1.0"
