@@ -1,6 +1,9 @@
-# pixelpwnr render (experiment, test)
+# pixelpwnr render (prototype)
 A blazingly fast GPU accelerated [pixelflut][pixelflut] ([video][pixelflut-video])
 renderer in [Rust][rust], for use in a high performance pixelflut server.
+
+See the server implementation, this renderer is implemented in here:  
+[→ pixelpwnr-server (server)](https://github.com/timvisee/pixelpwnr-server)
 
 **Note:** This is currently an experiment, and is heavily tested with.
 This prototype renderer will be implemented in a quick server if successful. 
