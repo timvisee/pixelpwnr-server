@@ -10,8 +10,13 @@ extern crate lazy_static;
 
 pub mod color;
 pub mod fps_counter;
-pub mod model;
+mod model;
 pub mod pixmap;
-pub mod primitive;
+mod primitive;
 pub mod renderer;
-pub mod vertex;
+mod vertex;
+
+// Reexport types
+pub use color::Color;
+pub use pixmap::Pixmap;
+pub use renderer::Renderer;
