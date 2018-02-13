@@ -1,4 +1,5 @@
 use std::mem;
+use std::ptr;
 
 use super::color::Color;
 
@@ -54,17 +55,35 @@ impl Pixmap {
     }
 
     /// Set the pixel at the given coordinate, to the given color.
-    pub fn set_pixel(&mut self, x: usize, y: usize, color: Color) {
+    pub fn set_pixel(&self, x: usize, y: usize, color: Color) {
         self.set_pixel_raw(x, y, color.to_raw());
     }
 
     /// Set the pixel at the given coordinate, to the given raw color value.
-    pub fn set_pixel_raw(&mut self, x: usize, y: usize, raw: u32) {
+    pub fn set_pixel_raw(&self, x: usize, y: usize, raw: u32) {
         // Determine the pixel index
         let index = self.pixel_index(x, y);
 
-        // Set the value
-        self.map[index] = raw;
+        // Write the pixel data
+        unsafe {
+            Pixmap::write_pixel_raw(&self.map, index, raw);
+        }
+    }
+
+    /// Write raw pixel data to the given pixel `map`.
+    ///
+    /// Note: this function writes raw pixel data on the pixel map at the
+    /// given index, even though the map itself is immutable.
+    /// This allows multiple writes from multiple threads at the same time.
+    /// This operation is considered safe however, as the writen set of bytes
+    /// is aligned.
+    /// See the description of this struct for more information.
+    unsafe fn write_pixel_raw(map: &Vec<u32>, i: usize, raw: u32) {
+        // Create a mutable pointer, to the pixel data on the immutable pixel map
+        let pixel_ptr: *mut u32 = (&map[i] as *const u32) as *mut u32;
+
+        // Write the new raw value to the pointer
+        ptr::write(pixel_ptr, raw);
     }
 
     /// Get the index a pixel is at, for the given coordinate.
