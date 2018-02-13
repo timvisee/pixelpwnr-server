@@ -1,5 +1,9 @@
+#![feature(try_trait)]
+
 extern crate bufstream;
 extern crate pixelpwnr_render;
+
+mod app;
 
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
@@ -59,30 +63,97 @@ fn handle_client(stream: TcpStream, pixmap: Arc<Pixmap>) {
             return;
         }
 
-        // Handle the screen size command
-        // if pattern_size.is_match(&data) {
-        if data.trim() == "SIZE" {
-            let (width, height) = pixmap.dimentions();
-            write!(reader, "SIZE {} {}\n", width, height).expect("failed to write");
-            reader.flush().expect("failed to flush");
-            continue;
-        }
+        // Split the input data, and get the first split
+        let mut splits = data.trim()
+            .split(" ")
+            .filter(|x| !x.is_empty());
+        let cmd = match splits.next() {
+            Some(c) => c,
+            None => continue,
+        };
 
-        // Handle pixel set command
-        let mut splits = data.trim().split(" ");
-        if splits.next().unwrap() == "PX" {
-            let x: usize = splits.next().unwrap().parse().expect("invalid x coordinate");
-            let y: usize = splits.next().unwrap().parse().expect("invalid x coordinate");
-            let color: Color = Color::from_hex(splits.next().unwrap()).expect("invalid color value");
-            // let color = Color::from_rgb(0, 0, 255);
-            pixmap.set_pixel(x, y, color);
-            continue;
+        // Process the command
+        // TODO: improve response handling
+        match process_command(cmd, splits, &pixmap) {
+            CmdResponse::Ok => {},
+            CmdResponse::Response(msg) => {
+                write!(reader, "{}", msg).expect("failed to write response");
+                reader.flush().expect("failed to flush stream");
+            },
+            CmdResponse::ClientErr(err) => {
+                write!(reader, "ERR {}", err).expect("failed to write error");
+                reader.flush().expect("failed to flush stream");
+            },
+            CmdResponse::InternalErr(err) => {
+                println!("Error: \"{}\". Closing connection...", err);
+                return;
+            },
         }
+    }
+}
+
+enum CmdResponse<'a> {
+    Ok,
+    Response(String),
+    ClientErr(&'a str),
+    InternalErr(&'a str),
+}
+
+fn process_command<'a, I: Iterator<Item=&'a str>>(
+    cmd: &str,
+    mut data: I,
+    pixmap: &Pixmap
+) -> CmdResponse<'a> {
+    match cmd {
+        "PX" => {
+            // Get and parse pixel data, and set the pixel
+            match data.next()
+                .ok_or("missing x coordinate")
+                .and_then(|x| x.parse()
+                    .map_err(|_| "invalid x coordinate")
+                )
+                .and_then(|x|
+                    data.next()
+                        .ok_or("missing y coordinate")
+                        .and_then(|y| y.parse()
+                            .map_err(|_| "invalid y coordinate")
+                        )
+                        .map(|y| (x, y))
+                )
+                .and_then(|(x, y)|
+                    data.next()
+                        .ok_or("missing color value")
+                        .and_then(|color| Color::from_hex(color)
+                            .map_err(|_| "invalid color value")
+                        )
+                        .map(|color| (x, y, color))
+                )
+            {
+                Ok((x, y, color)) => {
+                    // Set the pixel
+                    pixmap.set_pixel(x, y, color);
+                    CmdResponse::Ok
+                },
+                Err(msg) =>
+                    // An error occurred, respond with it
+                    CmdResponse::ClientErr(msg),
+            }
+        },
+        "SIZE" => {
+            // Get the screen dimentions
+            let (width, height) = pixmap.dimentions();
+
+            // Respond
+            CmdResponse::Response(
+                format!("SIZE {} {}\n", width, height),
+            )
+        },
+        _ => CmdResponse::ClientErr("unknown command"),
     }
 }
 
 fn render(pixmap: &Pixmap) {
     // Build and run the renderer
-    let mut renderer = Renderer::new("pixelpwnr-server", pixmap);
+    let mut renderer = Renderer::new(app::APP_NAME, pixmap);
     renderer.run();
 }
