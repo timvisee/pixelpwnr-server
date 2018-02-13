@@ -11,6 +11,39 @@ server in [Rust][rust].
 * Linux, Windows and macOS
 * ...
 
+## Installation
+For installation, Git and Rust cargo are required.
+Install the latest version of Rust with [rustup][rustup].
+
+Then, clone and install `pixelpwnr-server` with:
+```bash
+# Clone the project
+git clone https://github.com/timvisee/pixelpwnr-server.git
+cd pixelpwnr-server
+
+# Install pixelpwnr server
+cargo install
+
+# Start using pixelpwnr server
+pixelpwnr-server --help
+
+# or run it directly from Cargo
+cargo run --release -- --help
+```
+
+Or just build it and invoke the binary directly (Linux/macOS):
+```bash
+# Clone the project
+git clone https://github.com/timvisee/pixelpwnr-server.git
+cd pixelpwnr-server
+
+# Build the project (release version)
+cargo build --release
+
+# Start using pixelpwnr-server
+./target/release/pixelpwnr-server --help
+```
+
 ## Requirements
 * Rust nightly (v1.24 or higher)
 
