@@ -47,11 +47,16 @@ impl Color {
     ///
     /// If parsing the hexadecimal string failed, an error is returned.
     pub fn from_hex(value: &str) -> Result<Self, ParseIntError> {
-        // TODO: if 6 digits, set the alpha to the default
+        // Parse the hexadecimal value
+        let mut raw = u32::from_str_radix(value, 16)?;
 
-        // Parse the hexadecimal value, and construct a color
-        u32::from_str_radix(value, 16)
-            .map(|raw| Color::new(raw.to_be()))
+        // Shift and add an alpha channel, if it wasn't set
+        if value.len() <= 6 {
+            raw = 0xFF | (raw << 8);
+        }
+
+        // Construct and return the color
+        Ok(Color::new(raw.to_be()))
     }
 
     /// A black color, with the default alpha.
