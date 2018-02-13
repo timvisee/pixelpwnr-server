@@ -84,10 +84,10 @@ fn handle_client(stream: TcpStream, pixmap: Arc<Pixmap>) {
                 write!(reader, "ERR {}", err).expect("failed to write error");
                 reader.flush().expect("failed to flush stream");
             },
-            CmdResponse::InternalErr(err) => {
-                println!("Error: \"{}\". Closing connection...", err);
-                return;
-            },
+            // CmdResponse::InternalErr(err) => {
+            //     println!("Error: \"{}\". Closing connection...", err);
+            //     return;
+            // },
         }
     }
 }
@@ -96,7 +96,7 @@ enum CmdResponse<'a> {
     Ok,
     Response(String),
     ClientErr(&'a str),
-    InternalErr(&'a str),
+    // InternalErr(&'a str),
 }
 
 fn process_command<'a, I: Iterator<Item=&'a str>>(
