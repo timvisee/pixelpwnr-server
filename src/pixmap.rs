@@ -54,6 +54,11 @@ impl Pixmap {
         }
     }
 
+    /// Get the dimentions of the pixel map.
+    pub fn dimentions(&self) -> (usize, usize) {
+        self.dimentions
+    }
+
     /// Set the pixel at the given coordinate, to the given color.
     pub fn set_pixel(&self, x: usize, y: usize, color: Color) {
         self.set_pixel_raw(x, y, color.to_raw());
