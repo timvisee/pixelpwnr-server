@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["timvisee <timvisee@gmail.com>"]
 
 [dependencies]
+bufstream = "0.1"
 pixelpwnr-render = { path = "../pixelpwnr-render" }
 # pixelpwnr-render = { git = "https://github.com/timvisee/pixelpwnr-render.git" }

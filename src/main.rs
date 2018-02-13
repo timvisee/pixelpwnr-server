@@ -1,38 +1,55 @@
+extern crate bufstream;
 extern crate pixelpwnr_render;
 
-use std::io::BufReader;
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::thread;
 
+use bufstream::BufStream;
 use pixelpwnr_render::Color;
 use pixelpwnr_render::Pixmap;
 use pixelpwnr_render::Renderer;
 
 /// Main application entrypoint.
 fn main() {
-    // Set up a listener for the server
-    let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
-    println!("Listening on 127.0.0.1:8080...");
+    // Build a pixelmap
+    let pixmap = Arc::new(Pixmap::new(800, 600));
+    pixmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
+    pixmap.set_pixel(20, 40, Color::from_rgb(0, 255, 0));
 
-    // Accept connections and process them, spawning a new thread for each one
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                thread::spawn(move || handle_client(stream));
-            },
-            Err(_) => {}, // Connection failed
+    // Create a pixmap reference for the server thread
+    let pixmap_thread = pixmap.clone();
+
+    // Spawn the server thread
+    thread::spawn(move || {
+        // Set up a listener for the server
+        let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
+        println!("Listening on 127.0.0.1:8080...");
+
+        // Accept connections and process them, spawning a new thread for each one
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    // Create a pixmap reference for the client
+                    let pixmap_client = pixmap_thread.clone();
+
+                    // Spawn the client handling thread
+                    thread::spawn(move || handle_client(stream, pixmap_client));
+                },
+                Err(_) => {}, // Connection failed
+            }
         }
-    }
+    });
 
     // Render the pixelflut screen
-    render();
+    render(&pixmap);
 }
 
 /// Handle a client connection.
-fn handle_client(stream: TcpStream) {
+fn handle_client(stream: TcpStream, pixmap: Arc<Pixmap>) {
     // Create a buffered reader
-    let mut reader = BufReader::new(stream);
+    let mut reader = BufStream::new(stream);
 
     // A client has connected
     println!("A client has connected");
@@ -46,18 +63,30 @@ fn handle_client(stream: TcpStream) {
             return;
         }
 
-        // Show the received data
-        println!("Received: {}", data.trim());
+        // Handle the screen size command
+        // if pattern_size.is_match(&data) {
+        if data.trim() == "SIZE" {
+            let (width, height) = pixmap.dimentions();
+            write!(reader, "SIZE {} {}\n", width, height).expect("failed to write");
+            reader.flush().expect("failed to flush");
+            continue;
+        }
+
+        // Handle pixel set command
+        let mut splits = data.trim().split(" ");
+        if splits.next().unwrap() == "PX" {
+            let x: usize = splits.next().unwrap().parse().expect("invalid x coordinate");
+            let y: usize = splits.next().unwrap().parse().expect("invalid x coordinate");
+            let color: Color = Color::from_hex(splits.next().unwrap()).expect("invalid color value");
+            // let color = Color::from_rgb(0, 0, 255);
+            pixmap.set_pixel(x, y, color);
+            continue;
+        }
     }
 }
 
-fn render() {
-    // Build a pixelmap
-    let mut pixmap = Pixmap::new(800, 600);
-    pixmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
-    pixmap.set_pixel(20, 40, Color::from_rgb(0, 255, 0));
-
+fn render(pixmap: &Pixmap) {
     // Build and run the renderer
-    let mut renderer = Renderer::new(&pixmap);
+    let mut renderer = Renderer::new(pixmap);
     renderer.run();
 }
