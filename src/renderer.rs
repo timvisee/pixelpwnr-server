@@ -29,6 +29,9 @@ gfx_defines! {
 
 /// The renderer.
 pub struct Renderer<'a> {
+    // The window title.
+    title: &'a str,
+
     // Pixel map holding the screen data. 
     pixmap: &'a Pixmap,
 
@@ -41,11 +44,16 @@ pub struct Renderer<'a> {
 
 impl<'a> Renderer<'a> {
     /// Construct a new renderer.
+    ///
+    /// The renderer window title should be given to `title`.
+    /// The pixel map that is rendered should be given to `pixmap`.
     pub fn new(
+        title: &'a str,
         pixmap: &'a Pixmap,
-    ) -> Renderer {
+    ) -> Renderer<'a> {
         // Construct and return the renderer
         Renderer {
+            title,
             pixmap,
             events_loop: glutin::EventsLoop::new(),
             fps: FpsCounter::new(),
@@ -55,7 +63,7 @@ impl<'a> Renderer<'a> {
     pub fn run(&mut self) {
         // Define a window builder
         let builder = glutin::WindowBuilder::new()
-            .with_title("pixelpwnr-render-test".to_string())
+            .with_title(self.title.to_string())
             .with_dimensions(800, 600);
             // .with_vsync();
 
