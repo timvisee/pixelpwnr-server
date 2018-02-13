@@ -22,7 +22,7 @@ git clone https://github.com/timvisee/pixelpwnr-server.git
 cd pixelpwnr-server
 
 # Install pixelpwnr server
-cargo install
+cargo install -f
 
 # Start using pixelpwnr server
 pixelpwnr-server --help

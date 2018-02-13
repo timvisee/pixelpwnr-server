@@ -13,12 +13,8 @@ use pixelpwnr_render::Renderer;
 
 /// Main application entrypoint.
 fn main() {
-    // Build a pixelmap
+    // Build a pixelmap, create a reference for the connection thread
     let pixmap = Arc::new(Pixmap::new(800, 600));
-    pixmap.set_pixel(10, 10, Color::from_rgb(255, 0, 0));
-    pixmap.set_pixel(20, 40, Color::from_rgb(0, 255, 0));
-
-    // Create a pixmap reference for the server thread
     let pixmap_thread = pixmap.clone();
 
     // Spawn the server thread
@@ -87,6 +83,6 @@ fn handle_client(stream: TcpStream, pixmap: Arc<Pixmap>) {
 
 fn render(pixmap: &Pixmap) {
     // Build and run the renderer
-    let mut renderer = Renderer::new(pixmap);
+    let mut renderer = Renderer::new("pixelpwnr-server", pixmap);
     renderer.run();
 }
