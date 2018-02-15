@@ -27,7 +27,7 @@ pub fn main() {
     pixmap.set_pixel(20, 20, Color::from_hex("FF00FFFF").unwrap());
 
     // Build the renderer
-    let mut renderer = Renderer::new(&pixmap);
+    let mut renderer = Renderer::new("pixelpwnr-render", &pixmap);
 
     // Run
     renderer.run();
