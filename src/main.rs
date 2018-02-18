@@ -38,45 +38,48 @@ fn main() {
     // Build a pixelmap
     let pixmap = Arc::new(Pixmap::new(800, 600));
 
-	// First argument, the address to bind
-    let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
-    let addr = addr.parse::<SocketAddr>().unwrap();
+    // Start a server listener in a new thread
+    let pixmap_thread = pixmap.clone();
+    thread::spawn(move || {
+        // First argument, the address to bind
+        let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
+        let addr = addr.parse::<SocketAddr>().unwrap();
 
-    // Second argument, the number of threads we'll be using
-    let num_threads = env::args().nth(2).and_then(|s| s.parse().ok())
-        .unwrap_or(num_cpus::get());
+        // Second argument, the number of threads we'll be using
+        let num_threads = env::args().nth(2).and_then(|s| s.parse().ok())
+            .unwrap_or(num_cpus::get());
 
-    let listener = TcpListener::bind(&addr).expect("failed to bind");
-    println!("Listening on: {}", addr);
+        let listener = TcpListener::bind(&addr).expect("failed to bind");
+        println!("Listening on: {}", addr);
 
-    // Spin up our worker threads, creating a channel routing to each worker
-    // thread that we'll use below.
-    let mut channels = Vec::new();
-    for _ in 0..num_threads {
-        let (tx, rx) = mpsc::unbounded();
-        channels.push(tx);
-        let pixmap_thread = pixmap.clone();
-        thread::spawn(|| worker(rx, pixmap_thread));
-    }
+        // Spin up our worker threads, creating a channel routing to each worker
+        // thread that we'll use below.
+        let mut channels = Vec::new();
+        for _ in 0..num_threads {
+            let (tx, rx) = mpsc::unbounded();
+            channels.push(tx);
+            let pixmap_worker = pixmap_thread.clone();
+            thread::spawn(|| worker(rx, pixmap_worker));
+        }
 
-    // Infinitely accept sockets from our `TcpListener`. Each socket is then
-    // shipped round-robin to a particular thread which will associate the
-    // socket with the corresponding event loop and process the connection.
-    let mut next = 0;
-    let srv = listener.incoming().for_each(|socket| {
-        channels[next].unbounded_send(socket).expect("worker thread died");
-        next = (next + 1) % channels.len();
-        Ok(())
+        // Infinitely accept sockets from our `TcpListener`. Each socket is then
+        // shipped round-robin to a particular thread which will associate the
+        // socket with the corresponding event loop and process the connection.
+        let mut next = 0;
+        let srv = listener.incoming().for_each(|socket| {
+            channels[next].unbounded_send(socket).expect("worker thread died");
+            next = (next + 1) % channels.len();
+            Ok(())
+        });
+
+        srv.wait().unwrap();
     });
 
     // // Render the pixelflut screen
-    // render(&pixmap);
-
-    // TODO: should we wait here!?
-    srv.wait().unwrap();
+    render(&pixmap);
 }
 
-fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, _pixmap: Arc<Pixmap>) {
+fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
     let pool = CpuPool::new(1);
 
     let done = rx.for_each(move |socket| {
@@ -89,7 +92,7 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, _pixmap: Arc<Pixmap>) {
         let lines = Lines::new(socket);
 
         // Define a peer as connection
-        let connection = Peer::new(lines)
+        let connection = Peer::new(lines, pixmap.clone())
             .map_err(|e| {
                 println!("connection error = {:?}", e);
             });
@@ -241,13 +244,17 @@ struct Peer {
     /// `Lines`, we can work at the line level instead of having to manage the
     /// raw byte operations.
     lines: Lines,
+
+    /// A pixel map.
+    pixmap: Arc<Pixmap>,
 }
 
 impl Peer {
     /// Create a new instance of `Peer`.
-    fn new(lines: Lines) -> Peer {
+    fn new(lines: Lines, pixmap: Arc<Pixmap>) -> Peer {
         Peer {
             lines,
+            pixmap,
         }
     }
 }
@@ -288,6 +295,44 @@ impl Future for Peer {
                 // converts it from mutable -> immutable, allowing zero copy
                 // cloning.
                 let line = line.freeze();
+
+
+
+                // Split the input data, and get the first split
+                // TODO: trim?
+                // TODO: don't convert to a string here
+                let line = String::from_utf8(line.to_vec()).expect("failed to encode input as string");
+                let mut splits = line
+                    .split(" ")
+                    .filter(|x| !x.is_empty());
+                let cmd = match splits.next() {
+                    Some(c) => c,
+                    None => continue,
+                };
+
+                // Process the command
+                // TODO: improve response handling
+                match process_command(cmd, splits, &self.pixmap) {
+                    CmdResponse::Ok => {},
+                    CmdResponse::Response(msg) => {
+                        // TODO: write back
+                        // write!(reader, "{}", msg).expect("failed to write response");
+                        // reader.flush().expect("failed to flush stream");
+                    },
+                    CmdResponse::ClientErr(err) => {
+                        // TODO: write back
+                        // write!(reader, "ERR {}", err).expect("failed to write error");
+                        // reader.flush().expect("failed to flush stream");
+                    },
+                    // CmdResponse::InternalErr(err) => {
+                    //     println!("Error: \"{}\". Closing connection...", err);
+                    //     return;
+                    // },
+                }
+
+
+
+                // TODO: process the line as command
 
                 // // Now, send the line to all other peers
                 // for (addr, tx) in &self.state.borrow().peers {
@@ -368,68 +413,68 @@ impl Future for Peer {
 //     }
 // }
 
-// enum CmdResponse<'a> {
-//     Ok,
-//     Response(String),
-//     ClientErr(&'a str),
-//     // InternalErr(&'a str),
-// }
+enum CmdResponse<'a> {
+    Ok,
+    Response(String),
+    ClientErr(&'a str),
+    // InternalErr(&'a str),
+}
 
-// fn process_command<'a, I: Iterator<Item=&'a str>>(
-//     cmd: &str,
-//     mut data: I,
-//     pixmap: &Pixmap
-// ) -> CmdResponse<'a> {
-//     match cmd {
-//         "PX" => {
-//             // Get and parse pixel data, and set the pixel
-//             match data.next()
-//                 .ok_or("missing x coordinate")
-//                 .and_then(|x| x.parse()
-//                     .map_err(|_| "invalid x coordinate")
-//                 )
-//                 .and_then(|x|
-//                     data.next()
-//                         .ok_or("missing y coordinate")
-//                         .and_then(|y| y.parse()
-//                             .map_err(|_| "invalid y coordinate")
-//                         )
-//                         .map(|y| (x, y))
-//                 )
-//                 .and_then(|(x, y)|
-//                     data.next()
-//                         .ok_or("missing color value")
-//                         .and_then(|color| Color::from_hex(color)
-//                             .map_err(|_| "invalid color value")
-//                         )
-//                         .map(|color| (x, y, color))
-//                 )
-//             {
-//                 Ok((x, y, color)) => {
-//                     // Set the pixel
-//                     pixmap.set_pixel(x, y, color);
-//                     CmdResponse::Ok
-//                 },
-//                 Err(msg) =>
-//                     // An error occurred, respond with it
-//                     CmdResponse::ClientErr(msg),
-//             }
-//         },
-//         "SIZE" => {
-//             // Get the screen dimentions
-//             let (width, height) = pixmap.dimentions();
+fn process_command<'a, I: Iterator<Item=&'a str>>(
+    cmd: &str,
+    mut data: I,
+    pixmap: &Pixmap
+) -> CmdResponse<'a> {
+    match cmd {
+        "PX" => {
+            // Get and parse pixel data, and set the pixel
+            match data.next()
+                .ok_or("missing x coordinate")
+                .and_then(|x| x.parse()
+                    .map_err(|_| "invalid x coordinate")
+                )
+                .and_then(|x|
+                    data.next()
+                        .ok_or("missing y coordinate")
+                        .and_then(|y| y.parse()
+                            .map_err(|_| "invalid y coordinate")
+                        )
+                        .map(|y| (x, y))
+                )
+                .and_then(|(x, y)|
+                    data.next()
+                        .ok_or("missing color value")
+                        .and_then(|color| Color::from_hex(color)
+                            .map_err(|_| "invalid color value")
+                        )
+                        .map(|color| (x, y, color))
+                )
+            {
+                Ok((x, y, color)) => {
+                    // Set the pixel
+                    pixmap.set_pixel(x, y, color);
+                    CmdResponse::Ok
+                },
+                Err(msg) =>
+                    // An error occurred, respond with it
+                    CmdResponse::ClientErr(msg),
+            }
+        },
+        "SIZE" => {
+            // Get the screen dimentions
+            let (width, height) = pixmap.dimentions();
 
-//             // Respond
-//             CmdResponse::Response(
-//                 format!("SIZE {} {}\n", width, height),
-//             )
-//         },
-//         _ => CmdResponse::ClientErr("unknown command"),
-//     }
-// }
+            // Respond
+            CmdResponse::Response(
+                format!("SIZE {} {}\n", width, height),
+            )
+        },
+        _ => CmdResponse::ClientErr("unknown command"),
+    }
+}
 
-// fn render(pixmap: &Pixmap) {
-//     // Build and run the renderer
-//     let mut renderer = Renderer::new(app::APP_NAME, pixmap);
-//     renderer.run();
-// }
+fn render(pixmap: &Pixmap) {
+    // Build and run the renderer
+    let mut renderer = Renderer::new(app::APP_NAME, pixmap);
+    renderer.run();
+}
