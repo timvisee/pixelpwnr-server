@@ -210,10 +210,9 @@ impl Stream for Lines {
         let sock_closed = self.fill_read_buf()?.is_ready();
 
         // Now, try finding lines
-        let pos = self.rd.windows(2).enumerate()
-            .find(|&(_, bytes)| bytes == b"\r\n")
-            .map(|(i, _)| i);
-        // TODO: use .position() instead of the logic above
+        let pos = self.rd
+            .windows(2)
+            .position(|bytes| bytes == b"\r\n");
 
         if let Some(pos) = pos {
             // Remove the line from the read buffer and set it to `line`.
