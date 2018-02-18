@@ -59,7 +59,7 @@ fn main() {
         thread::spawn(|| worker(rx, pixmap_thread));
     }
 
-    // Infinitely accept sockets from our `TcpListener`.  Each socket is then
+    // Infinitely accept sockets from our `TcpListener`. Each socket is then
     // shipped round-robin to a particular thread which will associate the
     // socket with the corresponding event loop and process the connection.
     let mut next = 0;
@@ -80,25 +80,16 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, _pixmap: Arc<Pixmap>) {
     let pool = CpuPool::new(1);
 
     let done = rx.for_each(move |socket| {
+        // A client connected, ensure we're able to get it's address
         let addr = socket.peer_addr().expect("failed to get remote address");
+        println!("A client connected");
 
         // Wrap the socket with the Lines codec,
         // to interact with lines instead of raw bytes
         let lines = Lines::new(socket);
 
-        let connection = lines.into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(name, lines)| {
-                println!("Client connected");
-
-                // Create a peer
-                let peer = Peer::new(lines);
-
-                // TODO: not required when we have a single endpoint?
-                // Just return peer?
-                //Either::B(peer)
-                peer
-            })
+        // Define a peer as connection
+        let connection = Peer::new(lines)
             .map_err(|e| {
                 println!("connection error = {:?}", e);
             });
@@ -222,6 +213,7 @@ impl Stream for Lines {
         let pos = self.rd.windows(2).enumerate()
             .find(|&(_, bytes)| bytes == b"\r\n")
             .map(|(i, _)| i);
+        // TODO: use .position() instead of the logic above
 
         if let Some(pos) = pos {
             // Remove the line from the read buffer and set it to `line`.
