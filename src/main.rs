@@ -1,3 +1,4 @@
+extern crate atoi;
 extern crate bufstream;
 extern crate bytes;
 #[macro_use]
@@ -11,27 +12,27 @@ extern crate tokio_io;
 
 mod app;
 
+use atoi::atoi;
 use futures::prelude::*;
-use futures::future::{Either, Executor};
+use futures::future::Executor;
 use futures::sync::mpsc;
 use futures_cpupool::CpuPool;
 use tokio_io::AsyncRead;
-use tokio_io::io::copy;
 use tokio::net::{TcpStream, TcpListener};
 
 use std::env;
 use std::io;
-use std::io::BufReader;
 use std::io::prelude::*;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
 
-use bufstream::BufStream;
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use pixelpwnr_render::Color;
 use pixelpwnr_render::Pixmap;
 use pixelpwnr_render::Renderer;
+
+// TODO: use some constant for new lines
 
 /// Main application entrypoint.
 fn main() {
@@ -80,12 +81,13 @@ fn main() {
 }
 
 fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
+    // TODO: Define a better pool size
     let pool = CpuPool::new(1);
 
     let done = rx.for_each(move |socket| {
         // A client connected, ensure we're able to get it's address
         let addr = socket.peer_addr().expect("failed to get remote address");
-        println!("A client connected");
+        println!("A client connected from {}", addr);
 
         // Wrap the socket with the Lines codec,
         // to interact with lines instead of raw bytes
@@ -100,22 +102,6 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
         // Add the connection future to the pool on this thread
         pool.execute(connection).unwrap();
 
-        // // Like the single-threaded `echo` example we split the socket halves
-        // // and use the `copy` helper to ship bytes back and forth. Afterwards we
-        // // spawn the task to run concurrently on this thread, and then print out
-        // // what happened afterwards
-        // let (reader, writer) = socket.split();
-        // let amt = copy(reader, writer);
-        // let msg = amt.then(move |result| {
-        //     match result {
-        //         Ok((amt, _, _)) => println!("wrote {} bytes to {}", amt, addr),
-        //         Err(e) => println!("error on {}: {}", addr, e),
-        //     }
-
-        //     Ok(())
-        // });
-        // pool.execute(msg).unwrap();
-
         Ok(())
     });
 
@@ -127,8 +113,8 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
 ///
 /// This decorates a socket and presents a line based read / write interface.
 ///
-/// As a user of `Lines`, we can focus on working at the line level. So, we send
-/// and receive values that represent entire lines. The `Lines` codec will
+/// As a user of `Lines`, we can focus on working at the line level. So, we
+/// send and receive values that represent entire lines. The `Lines` codec will
 /// handle the encoding and decoding as well as reading from and writing to the
 /// socket.
 #[derive(Debug)]
@@ -136,8 +122,8 @@ struct Lines {
     /// The TCP socket.
     socket: TcpStream,
 
-    /// Buffer used when reading from the socket. Data is not returned from this
-    /// buffer until an entire line has been read.
+    /// Buffer used when reading from the socket. Data is not returned from
+    /// this buffer until an entire line has been read.
     rd: BytesMut,
 
     /// Buffer used to stage data before writing it to the socket.
@@ -260,6 +246,14 @@ impl Peer {
             pixmap,
         }
     }
+
+    /// Respond to the client with the given response.
+    ///
+    /// A new line is automatically appended to the response.
+    pub fn respond(&mut self, response: String) {
+        self.lines.buffer(response.as_bytes());
+        self.lines.buffer(b"\r\n");
+    }
 }
 
 /// This is where a connected client is managed.
@@ -285,67 +279,49 @@ impl Future for Peer {
         // Read new lines from the socket
         while let Async::Ready(line) = self.lines.poll()? {
             if let Some(message) = line {
-                // Append the peer's name to the front of the line:
-                // TODO: use a better conversion method here
-                let mut line = message;
+                // Get the input we're working with
+                let input = message.freeze();
 
-                // We're using `Bytes`, which allows zero-copy clones (by
-                // storing the data in an Arc internally).
-                //
-                // However, before cloning, we must freeze the data. This
-                // converts it from mutable -> immutable, allowing zero copy
-                // cloning.
-                let line = line.freeze();
+                // Parse the command to run
+                let cmd = Cmd::parse(input);
+                if let Err(err) = cmd {
+                    // Report the error to the client
+                    self.respond(format!("ERR {}", err));
 
-
-
-                // Split the input data, and get the first split
-                // TODO: trim?
-                // TODO: don't convert to a string here
-                let line = String::from_utf8(line.to_vec()).expect("failed to encode input as string");
-                let mut splits = line
-                    .split(" ")
-                    .filter(|x| !x.is_empty());
-                let cmd = match splits.next() {
-                    Some(c) => c,
-                    None => continue,
-                };
-
-                // Process the command
-                // TODO: improve response handling
-                match process_command(cmd, splits, &self.pixmap) {
-                    CmdResponse::Ok => {},
-                    CmdResponse::Response(msg) => {
-                        // TODO: write back
-                        // write!(reader, "{}", msg).expect("failed to write response");
-                        // reader.flush().expect("failed to flush stream");
-                        self.lines.buffer(msg.as_bytes());
-                    },
-                    CmdResponse::ClientErr(err) => {
-                        // TODO: write back
-                        // write!(reader, "ERR {}", err).expect("failed to write error");
-                        // reader.flush().expect("failed to flush stream");
-                    },
-                    // CmdResponse::InternalErr(err) => {
-                    //     println!("Error: \"{}\". Closing connection...", err);
-                    //     return;
-                    // },
+                    // TODO: disconnect the client
+                    continue;
                 }
+                let cmd = cmd.unwrap();
 
+                // Invoke the command, and catch the result
+                let result = cmd.invoke(&self.pixmap);
 
+                // Do something with the result
+                match result {
+                    // Do nothing
+                    CmdResult::Ok => {},
 
-                // TODO: process the line as command
+                    // Respond to the client
+                    CmdResult::Response(bytes) => {
+                        self.lines.buffer(&bytes);
+                        self.lines.buffer(b"\r\n");
+                    },
 
-                // // Now, send the line to all other peers
-                // for (addr, tx) in &self.state.borrow().peers {
-                //     // Don't send the message to ourselves
-                //     if *addr != self.addr {
-                //         // The send only fails if the rx half has been dropped,
-                //         // however this is impossible as the `tx` half will be
-                //         // removed from the map before the `rx` is dropped.
-                //         tx.unbounded_send(line.clone()).unwrap();
-                //     }
-                // }
+                    // Report the error to the user
+                    CmdResult::ClientErr(err) => {
+                        // Report the error to the client
+                        self.respond(format!("ERR {}", err));
+
+                        // TODO: disconnect the client after sending
+                    },
+
+                    // Report the error to the server
+                    CmdResult::ServerErr(err) => {
+                        println!("Client error \"{}\" occurred, disconnecting...", err);
+
+                        // TODO: disconnect the client
+                    },
+                }
             } else {
                 // EOF was reached. The remote client has disconnected. There is
                 // nothing more to do.
@@ -362,117 +338,151 @@ impl Future for Peer {
     }
 }
 
+/// A set of pixel commands a client might send.
+enum Cmd {
+    /// Get the color of a pixel.
+    ///
+    /// The `x` and `y` coordinate.
+    GetPixel(usize, usize),
 
+    /// Set a pixel color.
+    ///
+    /// The `x` and `y` coordinate, with a `color`.
+    SetPixel(usize, usize, Color),
 
+    /// Request the size of the screen.
+    Size,
 
+    /// Request help.
+    Help,
 
+    /// Quit, break the connection.
+    Quit,
 
-
-
-// /// Handle a client connection.
-// fn handle_client(stream: TcpStream, pixmap: Arc<Pixmap>) {
-//     // Create a buffered reader
-//     let mut reader = BufStream::new(stream);
-
-//     // A client has connected
-//     println!("A client has connected");
-
-//     // Read client input
-//     loop {
-//         // Read a new line
-//         let mut data = String::new();
-//         if let Err(_) = reader.read_line(&mut data) {
-//             println!("An error occurred, closing stream");
-//             return;
-//         }
-
-//         // Split the input data, and get the first split
-//         let mut splits = data.trim()
-//             .split(" ")
-//             .filter(|x| !x.is_empty());
-//         let cmd = match splits.next() {
-//             Some(c) => c,
-//             None => continue,
-//         };
-
-//         // Process the command
-//         // TODO: improve response handling
-//         match process_command(cmd, splits, &pixmap) {
-//             CmdResponse::Ok => {},
-//             CmdResponse::Response(msg) => {
-//                 write!(reader, "{}", msg).expect("failed to write response");
-//                 reader.flush().expect("failed to flush stream");
-//             },
-//             CmdResponse::ClientErr(err) => {
-//                 write!(reader, "ERR {}", err).expect("failed to write error");
-//                 reader.flush().expect("failed to flush stream");
-//             },
-//             // CmdResponse::InternalErr(err) => {
-//             //     println!("Error: \"{}\". Closing connection...", err);
-//             //     return;
-//             // },
-//         }
-//     }
-// }
-
-enum CmdResponse<'a> {
-    Ok,
-    Response(String),
-    ClientErr(&'a str),
-    // InternalErr(&'a str),
+    /// Do nothing, just continue.
+    /// This is returned when an empty command was received.
+    None,
 }
 
-fn process_command<'a, I: Iterator<Item=&'a str>>(
-    cmd: &str,
-    mut data: I,
-    pixmap: &Pixmap
-) -> CmdResponse<'a> {
-    match cmd {
-        "PX" => {
-            // Get and parse pixel data, and set the pixel
-            match data.next()
-                .ok_or("missing x coordinate")
-                .and_then(|x| x.parse()
-                    .map_err(|_| "invalid x coordinate")
-                )
-                .and_then(|x|
-                    data.next()
-                        .ok_or("missing y coordinate")
-                        .and_then(|y| y.parse()
-                            .map_err(|_| "invalid y coordinate")
-                        )
-                        .map(|y| (x, y))
-                )
-                .and_then(|(x, y)|
-                    data.next()
-                        .ok_or("missing color value")
-                        .and_then(|color| Color::from_hex(color)
-                            .map_err(|_| "invalid color value")
-                        )
-                        .map(|color| (x, y, color))
-                )
-            {
-                Ok((x, y, color)) => {
-                    // Set the pixel
-                    pixmap.set_pixel(x, y, color);
-                    CmdResponse::Ok
-                },
-                Err(msg) =>
-                    // An error occurred, respond with it
-                    CmdResponse::ClientErr(msg),
-            }
-        },
-        "SIZE" => {
-            // Get the screen dimentions
-            let (width, height) = pixmap.dimentions();
+impl Cmd {
+    /// Parse the command to run, from the given input bytes.
+    pub fn parse<'a>(input: Bytes) -> Result<Self, &'a str> {
+        // Iterate over input parts
+        let mut input = input
+            .split(|b| b == &b' ')
+            .filter(|part| !part.is_empty());
 
-            // Respond
-            CmdResponse::Response(
-                format!("SIZE {} {}\n", width, height),
-            )
-        },
-        _ => CmdResponse::ClientErr("unknown command"),
+        // Parse the command
+        match input.next() {
+            Some(cmd) => match cmd {
+                // Pixel command
+                b"PX" => {
+                    // Get the raw coordinates
+                    let (x, y) = (
+                        input.next().ok_or("missing x coordinate")?,
+                        input.next().ok_or("missing y coordinate")?,
+                    );
+
+                    // Parse coordinates
+                    let (x, y): (usize, usize) = (
+                        atoi(x).ok_or("invalid x coordinate")?,
+                        atoi(y).ok_or("invalid y coordinate")?,
+                    );
+
+                    // Get the color part, determine whether this is a get/set
+                    // command
+                    match input.next() {
+                        // Color part found, set the pixel command
+                        // TODO: don't convert to a string here
+                        Some(color) => Ok(Cmd::SetPixel(
+                            x,
+                            y,
+                            Color::from_hex(&String::from_utf8_lossy(color))
+                                .map_err(|_| "invalid color value")?,
+                        )),
+
+                        // No color part found, get the pixel color
+                        None => Ok(Cmd::GetPixel(x, y))
+                    }
+                },
+
+                // Basic commands
+                b"SIZE" => Ok(Cmd::Size),
+                b"HELP" => Ok(Cmd::Help),
+                b"QUIT" => Ok(Cmd::Quit),
+
+                // Unknown command
+                _ => Err("unknown command, use HELP"),
+            },
+
+            // If no command was specified, do nothing
+            None => Ok(Cmd::None),
+        }
     }
+
+    /// Invoke the command, and return the result.
+    pub fn invoke<'a>(self, pixmap: &Pixmap) -> CmdResult<'a> {
+        // Match the command, invoke the proper action
+        match self {
+            // Set the pixel on the pixel map
+            Cmd::SetPixel(x, y, color) => pixmap.set_pixel(x, y, color),
+
+            // Get a pixel color from the pixel map
+            Cmd::GetPixel(x, y) => {
+                // Get the raw color value
+                // TODO: format HEX with 6 or 8 digits
+                let color = pixmap.pixel_raw(x, y);
+
+                let mut response = BytesMut::new().writer();
+                if write!(response, "PX {} {} {:X}", x, y, color).is_err() {
+                    return CmdResult::ServerErr("failed to write response to buffer");
+                }
+
+                return CmdResult::Response(
+                    response.into_inner().freeze(),
+                );
+            },
+
+            // Get the size of the screen
+            Cmd::Size => {
+                // Get the size
+                let (x, y) = pixmap.dimentions();
+
+                let mut response = BytesMut::new().writer();
+                if write!(response, "SIZE {} {}", x, y).is_err() {
+                    return CmdResult::ServerErr("failed to write response to buffer");
+                }
+
+                return CmdResult::Response(
+                    response.into_inner().freeze(),
+                );
+            },
+
+            Cmd::Help | Cmd::Quit => {
+                // TODO: implement
+                panic!("pixelflut command not yet implemented");
+                // return CmdResult::ClientErr("not yet implemented");
+            }
+
+            // Do nothing
+            Cmd::None => {},
+        }
+
+        // Everything went right
+        CmdResult::Ok
+    }
+}
+
+/// A result, returned when invoking a command.
+///
+/// This result defines the status of the command that was invoked.
+/// Some response might need to be send to the client,
+/// or an error might have occurred.
+enum CmdResult<'a> {
+    Ok,
+    Response(Bytes),
+    ClientErr(&'a str),
+    ServerErr(&'a str),
 }
 
 fn render(pixmap: &Pixmap) {
