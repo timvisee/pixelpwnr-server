@@ -97,6 +97,7 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
                 println!("connection error = {:?}", e);
             });
 
+        // Add the connection future to the pool on this thread
         pool.execute(connection).unwrap();
 
         // // Like the single-threaded `echo` example we split the socket halves
@@ -117,6 +118,8 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
 
         Ok(())
     });
+
+    // Handle all connection futures, and wait until we're done
     done.wait().unwrap();
 }
 
@@ -281,8 +284,6 @@ impl Future for Peer {
 
         // Read new lines from the socket
         while let Async::Ready(line) = self.lines.poll()? {
-            println!("Received line {:?}", line);
-
             if let Some(message) = line {
                 // Append the peer's name to the front of the line:
                 // TODO: use a better conversion method here
@@ -318,6 +319,7 @@ impl Future for Peer {
                         // TODO: write back
                         // write!(reader, "{}", msg).expect("failed to write response");
                         // reader.flush().expect("failed to flush stream");
+                        self.lines.buffer(msg.as_bytes());
                     },
                     CmdResponse::ClientErr(err) => {
                         // TODO: write back
