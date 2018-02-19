@@ -1,11 +1,25 @@
 use gfx;
 use gfx::Device;
-use gfx::texture::{AaMode, Kind};
+use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
 use gfx_window_glutin as gfx_glutin;
-use glutin::{EventsLoop, VirtualKeyCode};
 use glutin;
-use glutin::WindowEvent::*;
+use glutin::{
+    ContextBuilder,
+    EventsLoop,
+    GlContext,
+    GlProfile,
+    GlRequest,
+    KeyboardInput,
+    Robustness,
+    VirtualKeyCode,
+};
+use glutin::Event::WindowEvent;
+use glutin::WindowEvent::{
+    Closed,
+    KeyboardInput as WindowKeyboardInput,
+    Resized,
+};
 
 use fps_counter::FpsCounter;
 use pixmap::Pixmap;
@@ -64,8 +78,17 @@ impl<'a> Renderer<'a> {
         // Define a window builder
         let builder = glutin::WindowBuilder::new()
             .with_title(self.title.to_string())
-            .with_dimensions(800, 600)
-            .with_vsync();
+            .with_dimensions(800, 600);
+
+        // Define the graphics context
+        // TODO: properly configure this context
+        let context = ContextBuilder::new()
+            .with_srgb(true)
+            .with_gl(GlRequest::Latest)
+            .with_gl_robustness(Robustness::TryRobustNoResetNotification)
+            .with_gl_profile(GlProfile::Core)
+            .with_multisampling(1)
+            .with_vsync(true);
 
         // Initialize glutin
         let (
@@ -74,7 +97,11 @@ impl<'a> Renderer<'a> {
             mut factory,
             main_color,
             mut main_depth,
-        ) = gfx_glutin::init::<ColorFormat, DepthFormat>(builder, &self.events_loop);
+        ) = gfx_glutin::init::<ColorFormat, DepthFormat>(
+            builder,
+            context,
+            &self.events_loop
+        );
 
         // Create the command encoder
         let mut encoder: gfx::Encoder<_, _> = factory
@@ -135,20 +162,34 @@ impl<'a> Renderer<'a> {
             }
 
             // Poll vor events
-            self.events_loop.poll_events(|glutin::Event::WindowEvent{window_id: _, event}| {
+            self.events_loop.poll_events(|event| {
                 match event {
-                    // Stop running when escape is pressed
-                    KeyboardInput(_, _, Some(VirtualKeyCode::Escape), _)
-                    | Closed => running = false,
+                    WindowEvent {
+                        window_id: _,
+                        event
+                    } => match event {
+                        // Stop running when escape is pressed
+                        WindowKeyboardInput  {
+                            device_id: _,
+                            input: KeyboardInput {
+                                scancode: _,
+                                state: _,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                modifiers: _
+                            }
+                        } | Closed => running = false,
 
-                    // Update the view when the window is resized
-                    Resized(w, h) => {
-                        gfx_glutin::update_views(&window, &mut data.out, &mut main_depth);
-                        dimentions = (w as f32, h as f32);
-                        update = true
+                        // Update the view when the window is resized
+                        Resized(w, h) => {
+                            gfx_glutin::update_views(&window, &mut data.out, &mut main_depth);
+                            dimentions = (w as f32, h as f32);
+                            update = true
+                        },
+
+                        _ => {},
                     },
 
-                    _ => (),
+                    _ => {},
                 }
             });
 
@@ -178,8 +219,10 @@ impl<'a> Renderer<'a> {
             R: gfx::Resources,
     {
         // Create a GPU texture
+        // TODO: make sure the mipmap state is correct
         let (_, view) = factory.create_texture_immutable_u8::<ColorFormat>(
             kind,
+            Mipmap::Provided,
             &[data],
         ).unwrap();
 
