@@ -1,159 +1,116 @@
-#![feature(try_trait)]
-
+extern crate atoi;
 extern crate bufstream;
+extern crate bytes;
+#[macro_use]
+extern crate futures;
+extern crate futures_cpupool;
+extern crate num_cpus;
 extern crate pixelpwnr_render;
+extern crate tokio;
+#[macro_use]
+extern crate tokio_io;
 
 mod app;
+mod client;
+mod cmd;
+mod codec;
 
-use std::io::prelude::*;
-use std::net::{TcpListener, TcpStream};
+use std::env;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
 
-use bufstream::BufStream;
-use pixelpwnr_render::Color;
-use pixelpwnr_render::Pixmap;
-use pixelpwnr_render::Renderer;
+use futures::prelude::*;
+use futures::future::Executor;
+use futures::sync::mpsc;
+use futures_cpupool::CpuPool;
+use pixelpwnr_render::{Pixmap, Renderer};
+use tokio::net::{TcpStream, TcpListener};
+
+use app::APP_NAME;
+use client::Client;
+use codec::Lines;
+
+// TODO: use some constant for new lines
 
 /// Main application entrypoint.
 fn main() {
-    // Build a pixelmap, create a reference for the connection thread
+    // Build a pixelmap
     let pixmap = Arc::new(Pixmap::new(800, 600));
+
+    // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
-
-    // Spawn the server thread
     thread::spawn(move || {
-        // Set up a listener for the server
-        let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
-        println!("Listening on 127.0.0.1:8080...");
+        // First argument, the address to bind
+        let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
+        let addr = addr.parse::<SocketAddr>().unwrap();
 
-        // Accept connections and process them, spawning a new thread for each one
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    // Create a pixmap reference for the client
-                    let pixmap_client = pixmap_thread.clone();
+        // Second argument, the number of threads we'll be using
+        let num_threads = env::args().nth(2).and_then(|s| s.parse().ok())
+            .unwrap_or(num_cpus::get());
 
-                    // Spawn the client handling thread
-                    thread::spawn(move || handle_client(stream, pixmap_client));
-                },
-                Err(_) => {}, // Connection failed
-            }
+        let listener = TcpListener::bind(&addr).expect("failed to bind");
+        println!("Listening on: {}", addr);
+
+        // Spin up our worker threads, creating a channel routing to each worker
+        // thread that we'll use below.
+        let mut channels = Vec::new();
+        for _ in 0..num_threads {
+            let (tx, rx) = mpsc::unbounded();
+            channels.push(tx);
+            let pixmap_worker = pixmap_thread.clone();
+            thread::spawn(|| worker(rx, pixmap_worker));
         }
+
+        // Infinitely accept sockets from our `TcpListener`. Each socket is then
+        // shipped round-robin to a particular thread which will associate the
+        // socket with the corresponding event loop and process the connection.
+        let mut next = 0;
+        let srv = listener.incoming().for_each(|socket| {
+            channels[next].unbounded_send(socket).expect("worker thread died");
+            next = (next + 1) % channels.len();
+            Ok(())
+        });
+
+        srv.wait().unwrap();
     });
 
     // Render the pixelflut screen
     render(&pixmap);
 }
 
-/// Handle a client connection.
-fn handle_client(stream: TcpStream, pixmap: Arc<Pixmap>) {
-    // Create a buffered reader
-    let mut reader = BufStream::new(stream);
+fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
+    // TODO: Define a better pool size
+    let pool = CpuPool::new(1);
 
-    // A client has connected
-    println!("A client has connected");
+    let done = rx.for_each(move |socket| {
+        // A client connected, ensure we're able to get it's address
+        let addr = socket.peer_addr().expect("failed to get remote address");
+        println!("A client connected from {}", addr);
 
-    // Read client input
-    loop {
-        // Read a new line
-        let mut data = String::new();
-        if let Err(_) = reader.read_line(&mut data) {
-            println!("An error occurred, closing stream");
-            return;
-        }
+        // Wrap the socket with the Lines codec,
+        // to interact with lines instead of raw bytes
+        let lines = Lines::new(socket);
 
-        // Split the input data, and get the first split
-        let mut splits = data.trim()
-            .split(" ")
-            .filter(|x| !x.is_empty());
-        let cmd = match splits.next() {
-            Some(c) => c,
-            None => continue,
-        };
+        // Define a client as connection
+        let connection = Client::new(lines, pixmap.clone())
+            .map_err(|e| {
+                println!("connection error = {:?}", e);
+            });
 
-        // Process the command
-        // TODO: improve response handling
-        match process_command(cmd, splits, &pixmap) {
-            CmdResponse::Ok => {},
-            CmdResponse::Response(msg) => {
-                write!(reader, "{}", msg).expect("failed to write response");
-                reader.flush().expect("failed to flush stream");
-            },
-            CmdResponse::ClientErr(err) => {
-                write!(reader, "ERR {}", err).expect("failed to write error");
-                reader.flush().expect("failed to flush stream");
-            },
-            // CmdResponse::InternalErr(err) => {
-            //     println!("Error: \"{}\". Closing connection...", err);
-            //     return;
-            // },
-        }
-    }
+        // Add the connection future to the pool on this thread
+        pool.execute(connection).unwrap();
+
+        Ok(())
+    });
+
+    // Handle all connection futures, and wait until we're done
+    done.wait().unwrap();
 }
 
-enum CmdResponse<'a> {
-    Ok,
-    Response(String),
-    ClientErr(&'a str),
-    // InternalErr(&'a str),
-}
-
-fn process_command<'a, I: Iterator<Item=&'a str>>(
-    cmd: &str,
-    mut data: I,
-    pixmap: &Pixmap
-) -> CmdResponse<'a> {
-    match cmd {
-        "PX" => {
-            // Get and parse pixel data, and set the pixel
-            match data.next()
-                .ok_or("missing x coordinate")
-                .and_then(|x| x.parse()
-                    .map_err(|_| "invalid x coordinate")
-                )
-                .and_then(|x|
-                    data.next()
-                        .ok_or("missing y coordinate")
-                        .and_then(|y| y.parse()
-                            .map_err(|_| "invalid y coordinate")
-                        )
-                        .map(|y| (x, y))
-                )
-                .and_then(|(x, y)|
-                    data.next()
-                        .ok_or("missing color value")
-                        .and_then(|color| Color::from_hex(color)
-                            .map_err(|_| "invalid color value")
-                        )
-                        .map(|color| (x, y, color))
-                )
-            {
-                Ok((x, y, color)) => {
-                    // Set the pixel
-                    pixmap.set_pixel(x, y, color);
-                    CmdResponse::Ok
-                },
-                Err(msg) =>
-                    // An error occurred, respond with it
-                    CmdResponse::ClientErr(msg),
-            }
-        },
-        "SIZE" => {
-            // Get the screen dimentions
-            let (width, height) = pixmap.dimentions();
-
-            // Respond
-            CmdResponse::Response(
-                format!("SIZE {} {}\n", width, height),
-            )
-        },
-        _ => CmdResponse::ClientErr("unknown command"),
-    }
-}
-
+/// Start the pixel map renderer.
 fn render(pixmap: &Pixmap) {
     // Build and run the renderer
-    let mut renderer = Renderer::new(app::APP_NAME, pixmap);
+    let mut renderer = Renderer::new(APP_NAME, pixmap);
     renderer.run();
 }
