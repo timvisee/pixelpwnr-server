@@ -59,6 +59,11 @@ impl Color {
         Ok(Color::new(raw.to_be()))
     }
 
+    /// Get the hexadecimal value of the color.
+    pub fn hex(&self) -> String {
+        format!("{:06X}", self.value.to_be() >> 8)
+    }
+
     /// A black color, with the default alpha.
     pub fn black() -> Self {
         Color::from_rgb(0, 0, 0)

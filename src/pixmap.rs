@@ -59,6 +59,20 @@ impl Pixmap {
         self.dimentions
     }
 
+    /// Get the pixel at the given coordinate, as color.
+    pub fn pixel(&self, x: usize, y: usize) -> Color {
+        Color::new(self.pixel_raw(x, y))
+    }
+
+    /// Get the pixel at the given coordinate, as raw color value.
+    pub fn pixel_raw(&self, x: usize, y: usize) -> u32 {
+        // Determine the pixel index
+        let index = self.pixel_index(x, y);
+
+        // Get the pixel data
+        self.map[index]
+    }
+
     /// Set the pixel at the given coordinate, to the given color.
     pub fn set_pixel(&self, x: usize, y: usize, color: Color) {
         self.set_pixel_raw(x, y, color.to_raw());
@@ -93,6 +107,7 @@ impl Pixmap {
 
     /// Get the index a pixel is at, for the given coordinate.
     fn pixel_index(&self, x: usize, y: usize) -> usize {
+        // TODO: check bounds!
         y * self.dimentions.0 + x
     }
 
