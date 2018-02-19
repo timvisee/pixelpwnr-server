@@ -29,6 +29,7 @@ use futures_cpupool::CpuPool;
 use pixelpwnr_render::{Color, Pixmap, Renderer};
 use tokio::net::{TcpStream, TcpListener};
 
+use app::APP_NAME;
 use codec::Lines;
 
 // TODO: use some constant for new lines
@@ -92,8 +93,8 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
         // to interact with lines instead of raw bytes
         let lines = Lines::new(socket);
 
-        // Define a peer as connection
-        let connection = Peer::new(lines, pixmap.clone())
+        // Define a client as connection
+        let connection = Client::new(lines, pixmap.clone())
             .map_err(|e| {
                 println!("connection error = {:?}", e);
             });
@@ -109,7 +110,7 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
 }
 
 /// The state for each connected client.
-struct Peer {
+struct Client {
     /// The TCP socket wrapped with the `Lines` codec, defined below.
     ///
     /// This handles sending and receiving data on the socket. When using
@@ -121,10 +122,10 @@ struct Peer {
     pixmap: Arc<Pixmap>,
 }
 
-impl Peer {
-    /// Create a new instance of `Peer`.
-    fn new(lines: Lines, pixmap: Arc<Pixmap>) -> Peer {
-        Peer {
+impl Client {
+    /// Create a new instance of `Client`.
+    fn new(lines: Lines, pixmap: Arc<Pixmap>) -> Client {
+        Client {
             lines,
             pixmap,
         }
@@ -154,17 +155,17 @@ impl Peer {
 
 /// This is where a connected client is managed.
 ///
-/// A `Peer` is also a future representing completly processing the client.
+/// A `Client` is also a future representing completly processing the client.
 ///
-/// When a `Peer` is created, the first line (representing the client's name)
-/// has already been read. When the socket closes, the `Peer` future completes.
+/// When a `Client` is created, the first line (representing the client's name)
+/// has already been read. When the socket closes, the `Client` future completes.
 ///
-/// While processing, the peer future implementation will:
+/// While processing, the client future implementation will:
 ///
 /// 1) Receive messages on its message channel and write them to the socket.
-/// 2) Receive messages from the socket and broadcast them to all peers.
+/// 2) Receive messages from the socket and broadcast them to all clients.
 ///
-impl Future for Peer {
+impl Future for Client {
     type Item = ();
     type Error = io::Error;
 
@@ -426,6 +427,6 @@ enum CmdResult<'a> {
 /// Start the pixel map renderer.
 fn render(pixmap: &Pixmap) {
     // Build and run the renderer
-    let mut renderer = Renderer::new(app::APP_NAME, pixmap);
+    let mut renderer = Renderer::new(APP_NAME, pixmap);
     renderer.run();
 }
