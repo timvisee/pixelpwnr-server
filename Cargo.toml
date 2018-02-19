@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["timvisee <timvisee@gmail.com>"]
 
 [dependencies]
+atoi = "0.2.2"
 bufstream = "0.1"
 bytes = "0.4"
 futures = "0.1.16"
