@@ -12,7 +12,7 @@ use pixmap::Pixmap;
 use primitive::create_quad;
 use vertex::Vertex;
 
-pub type ColorFormat = gfx::format::Srgba8;
+pub type ColorFormat = gfx::format::Rgba8;
 pub type DepthFormat = gfx::format::DepthStencil;
 
 /// Black color definition with 4 channels.
@@ -64,8 +64,8 @@ impl<'a> Renderer<'a> {
         // Define a window builder
         let builder = glutin::WindowBuilder::new()
             .with_title(self.title.to_string())
-            .with_dimensions(800, 600);
-            // .with_vsync();
+            .with_dimensions(800, 600)
+            .with_vsync();
 
         // Initialize glutin
         let (
