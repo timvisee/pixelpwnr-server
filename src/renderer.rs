@@ -12,7 +12,7 @@ use pixmap::Pixmap;
 use primitive::create_quad;
 use vertex::Vertex;
 
-pub type ColorFormat = gfx::format::Srgba8;
+pub type ColorFormat = gfx::format::Rgba8;
 pub type DepthFormat = gfx::format::DepthStencil;
 
 /// Black color definition with 4 channels.
