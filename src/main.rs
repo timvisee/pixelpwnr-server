@@ -148,7 +148,7 @@ impl Lines {
         // Push the line onto the end of the write buffer.
         //
         // The `put` function is from the `BufMut` trait.
-        self.wr.put(line);
+        self.wr.extend_from_slice(line);
     }
 
     /// Flush the write buffer to the socket
@@ -256,6 +256,7 @@ impl Peer {
         self.lines.buffer(b"\r\n");
 
         // Flush the write buffer to the socket
+        // TODO: don't wait on this, flush in the background?
         self.lines.poll_flush()?;
         Ok(())
     }
@@ -394,16 +395,14 @@ impl Cmd {
             Some(cmd) => match cmd {
                 // Pixel command
                 b"PX" => {
-                    // Get the raw coordinates
+                    // Get and parse coordinates
                     let (x, y) = (
-                        input.next().ok_or("missing x coordinate")?,
-                        input.next().ok_or("missing y coordinate")?,
-                    );
-
-                    // Parse coordinates
-                    let (x, y): (usize, usize) = (
-                        atoi(x).ok_or("invalid x coordinate")?,
-                        atoi(y).ok_or("invalid y coordinate")?,
+                        atoi(
+                            input.next().ok_or("missing x coordinate")?
+                        ).ok_or("invalid x coordinate")?,
+                        atoi(
+                            input.next().ok_or("missing y coordinate")?
+                        ).ok_or("invalid y coordinate")?,
                     );
 
                     // Get the color part, determine whether this is a get/set
@@ -446,12 +445,11 @@ impl Cmd {
 
             // Get a pixel color from the pixel map
             Cmd::GetPixel(x, y) => {
-                // Get the raw color value
-                // TODO: format HEX with 6 or 8 digits
-                let color = pixmap.pixel_raw(x, y);
+                // Get the hexadecimal color value
+                let color = pixmap.pixel(x, y).hex();
 
                 let mut response = BytesMut::new().writer();
-                if write!(response, "PX {} {} {:X}", x, y, color).is_err() {
+                if write!(response, "PX {} {} {}", x, y, color).is_err() {
                     return CmdResult::ServerErr("failed to write response to buffer");
                 }
 
@@ -475,10 +473,11 @@ impl Cmd {
                 );
             },
 
-            Cmd::Help | Cmd::Quit => {
+            Cmd::Help => return CmdResult::Response(Self::help_list()),
+
+            Cmd::Quit => {
                 // TODO: implement
-                panic!("pixelflut command not yet implemented");
-                // return CmdResult::ClientErr("not yet implemented");
+                return CmdResult::ClientErr("command not yet implemented");
             }
 
             // Do nothing
@@ -487,6 +486,23 @@ impl Cmd {
 
         // Everything went right
         CmdResult::Ok
+    }
+
+    /// Get a list of command help, to respond to a client.
+    pub fn help_list() -> Bytes {
+        // Create a bytes buffer
+        let mut help = BytesMut::new();
+
+        // Append the commands
+        help.extend_from_slice(b"HELP Commands:\r\n");
+        help.extend_from_slice(b"HELP - PX <x> <y> <RRGGBB[AA]>\r\n");
+        help.extend_from_slice(b"HELP - PX <x> <y>   >>  PX <x> <y> <RRGGBB>\r\n");
+        help.extend_from_slice(b"HELP - SIZE         >>  SIZE <width> <height>\r\n");
+        help.extend_from_slice(b"HELP - HELP         >>  HELP ...\r\n");
+        help.extend_from_slice(b"HELP - QUIT");
+
+        // Freeze the bytes, and return
+        help.freeze()
     }
 }
 
