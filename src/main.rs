@@ -12,6 +12,13 @@ extern crate tokio_io;
 
 mod app;
 
+use std::env;
+use std::io;
+use std::io::prelude::*;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::thread;
+
 use atoi::atoi;
 use futures::prelude::*;
 use futures::future::Executor;
@@ -20,17 +27,8 @@ use futures_cpupool::CpuPool;
 use tokio_io::AsyncRead;
 use tokio::net::{TcpStream, TcpListener};
 
-use std::env;
-use std::io;
-use std::io::prelude::*;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::thread;
-
 use bytes::{BufMut, Bytes, BytesMut};
-use pixelpwnr_render::Color;
-use pixelpwnr_render::Pixmap;
-use pixelpwnr_render::Renderer;
+use pixelpwnr_render::{Color, Pixmap, Renderer};
 
 // TODO: use some constant for new lines
 
@@ -76,7 +74,7 @@ fn main() {
         srv.wait().unwrap();
     });
 
-    // // Render the pixelflut screen
+    // Render the pixelflut screen
     render(&pixmap);
 }
 
@@ -331,10 +329,15 @@ impl Future for Peer {
 
                     // Report the error to the server
                     CmdResult::ServerErr(err) => {
+                        // Show an error message in the console
                         println!("Client error \"{}\" occurred, disconnecting...", err);
 
-                        // TODO: disconnect the client
+                        // Disconnect the client
+                        return Ok(Async::Ready(()));
                     },
+
+                    // Quit the connection
+                    CmdResult::Quit => return Ok(Async::Ready(())),
                 }
             } else {
                 // EOF was reached. The remote client has disconnected. There is
@@ -448,11 +451,13 @@ impl Cmd {
                 // Get the hexadecimal color value
                 let color = pixmap.pixel(x, y).hex();
 
+                // Build the response
                 let mut response = BytesMut::new().writer();
                 if write!(response, "PX {} {} {}", x, y, color).is_err() {
                     return CmdResult::ServerErr("failed to write response to buffer");
                 }
 
+                // Send the response
                 return CmdResult::Response(
                     response.into_inner().freeze(),
                 );
@@ -463,22 +468,23 @@ impl Cmd {
                 // Get the size
                 let (x, y) = pixmap.dimentions();
 
+                // Build the response
                 let mut response = BytesMut::new().writer();
                 if write!(response, "SIZE {} {}", x, y).is_err() {
                     return CmdResult::ServerErr("failed to write response to buffer");
                 }
 
+                // Send the response
                 return CmdResult::Response(
                     response.into_inner().freeze(),
                 );
             },
 
+            // Show help
             Cmd::Help => return CmdResult::Response(Self::help_list()),
 
-            Cmd::Quit => {
-                // TODO: implement
-                return CmdResult::ClientErr("command not yet implemented");
-            }
+            // Quit the connection
+            Cmd::Quit => return CmdResult::Quit,
 
             // Do nothing
             Cmd::None => {},
@@ -494,12 +500,14 @@ impl Cmd {
         let mut help = BytesMut::new();
 
         // Append the commands
-        help.extend_from_slice(b"HELP Commands:\r\n");
-        help.extend_from_slice(b"HELP - PX <x> <y> <RRGGBB[AA]>\r\n");
-        help.extend_from_slice(b"HELP - PX <x> <y>   >>  PX <x> <y> <RRGGBB>\r\n");
-        help.extend_from_slice(b"HELP - SIZE         >>  SIZE <width> <height>\r\n");
-        help.extend_from_slice(b"HELP - HELP         >>  HELP ...\r\n");
-        help.extend_from_slice(b"HELP - QUIT");
+        help.extend_from_slice(b"\
+            HELP Commands:\r\n\
+            HELP - PX <x> <y> <RRGGBB[AA]>\r\n\
+            HELP - PX <x> <y>   >>  PX <x> <y> <RRGGBB>\r\n\
+            HELP - SIZE         >>  SIZE <width> <height>\r\n\
+            HELP - HELP         >>  HELP ...\r\n\
+            HELP - QUIT\
+        ");
 
         // Freeze the bytes, and return
         help.freeze()
@@ -512,12 +520,25 @@ impl Cmd {
 /// Some response might need to be send to the client,
 /// or an error might have occurred.
 enum CmdResult<'a> {
+    /// The command has been invoked successfully.
     Ok,
+
+    /// The command has been invoked successfully, and the following response
+    /// should be send to the client.
     Response(Bytes),
+
+    /// The following error occurred while invoking a command, based on the
+    /// clients input.
     ClientErr(&'a str),
+
+    /// The following error occurred while invoking a command on the server.
     ServerErr(&'a str),
+
+    /// The connection should be closed.
+    Quit,
 }
 
+/// Start the pixel map renderer.
 fn render(pixmap: &Pixmap) {
     // Build and run the renderer
     let mut renderer = Renderer::new(app::APP_NAME, pixmap);
