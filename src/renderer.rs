@@ -64,8 +64,8 @@ impl<'a> Renderer<'a> {
         // Define a window builder
         let builder = glutin::WindowBuilder::new()
             .with_title(self.title.to_string())
-            .with_dimensions(800, 600);
-            // .with_vsync();
+            .with_dimensions(800, 600)
+            .with_vsync();
 
         // Initialize glutin
         let (
