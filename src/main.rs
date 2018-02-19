@@ -250,9 +250,21 @@ impl Peer {
     /// Respond to the client with the given response.
     ///
     /// A new line is automatically appended to the response.
-    pub fn respond(&mut self, response: String) {
-        self.lines.buffer(response.as_bytes());
+    pub fn respond(&mut self, response: &[u8]) -> Result<(), io::Error> {
+        // Write to the buffer
+        self.lines.buffer(response);
         self.lines.buffer(b"\r\n");
+
+        // Flush the write buffer to the socket
+        self.lines.poll_flush()?;
+        Ok(())
+    }
+
+    /// Respond to the client with the given response as a string.
+    ///
+    /// A new line is automatically appended to the response.
+    pub fn respond_str(&mut self, response: String) -> Result<(), io::Error> {
+        self.respond(response.as_bytes())
     }
 }
 
@@ -286,7 +298,8 @@ impl Future for Peer {
                 let cmd = Cmd::parse(input);
                 if let Err(err) = cmd {
                     // Report the error to the client
-                    self.respond(format!("ERR {}", err));
+                    self.respond_str(format!("ERR {}", err))
+                        .expect("failed to flush write buffer");
 
                     // TODO: disconnect the client
                     continue;
@@ -302,15 +315,15 @@ impl Future for Peer {
                     CmdResult::Ok => {},
 
                     // Respond to the client
-                    CmdResult::Response(bytes) => {
-                        self.lines.buffer(&bytes);
-                        self.lines.buffer(b"\r\n");
-                    },
+                    CmdResult::Response(bytes) =>
+                        self.respond(&bytes)
+                            .expect("failed to flush write buffer"),
 
                     // Report the error to the user
                     CmdResult::ClientErr(err) => {
                         // Report the error to the client
-                        self.respond(format!("ERR {}", err));
+                        self.respond_str(format!("ERR {}", err))
+                            .expect("failed to flush write buffer");
 
                         // TODO: disconnect the client after sending
                     },
@@ -339,6 +352,10 @@ impl Future for Peer {
 }
 
 /// A set of pixel commands a client might send.
+///
+/// These commands may then be invoked on the pixel map state.
+/// A command might get or set the color of a pixel, or it
+/// might request help.
 enum Cmd {
     /// Get the color of a pixel.
     ///
