@@ -9,7 +9,7 @@ bufstream = "0.1"
 bytes = "0.4"
 futures = "0.1"
 futures-cpupool = "0.1"
-num_cpus = "1.0"
+num_cpus = "1.8"
 pixelpwnr-render = { path = "../pixelpwnr-render" }
 # pixelpwnr-render = { git = "https://github.com/timvisee/pixelpwnr-render.git" }
 tokio = "0.1"
