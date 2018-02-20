@@ -55,11 +55,13 @@ impl Pixmap {
     }
 
     /// Get the dimentions of the pixel map.
+    #[allow(dead_code)]
     pub fn dimentions(&self) -> (usize, usize) {
         self.dimentions
     }
 
     /// Get the pixel at the given coordinate, as color.
+    #[allow(dead_code)]
     pub fn pixel(&self, x: usize, y: usize) -> Color {
         Color::new(self.pixel_raw(x, y))
     }
