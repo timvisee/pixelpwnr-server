@@ -11,6 +11,5 @@ glutin = "0.12"
 lazy_static = "1.0"
 time = "0.1"
 
-# TODO: re-enable this at release 
-# [profile.release]
-# lto = true
+[profile.release]
+lto = true
