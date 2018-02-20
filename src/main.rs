@@ -1,6 +1,7 @@
 extern crate atoi;
 extern crate bufstream;
 extern crate bytes;
+extern crate clap;
 #[macro_use]
 extern crate futures;
 extern crate futures_cpupool;
@@ -11,12 +12,11 @@ extern crate tokio;
 extern crate tokio_io;
 
 mod app;
+mod arg_handler;
 mod client;
 mod cmd;
 mod codec;
 
-use std::env;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
 
@@ -28,6 +28,7 @@ use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpStream, TcpListener};
 
 use app::APP_NAME;
+use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
 
@@ -35,22 +36,23 @@ use codec::Lines;
 
 /// Main application entrypoint.
 fn main() {
-    // Build a pixelmap
-    let pixmap = Arc::new(Pixmap::new(800, 600));
+    // Parse CLI arguments
+    let arg_handler = ArgHandler::parse();
+
+    // Build the pixelmap size
+    let size = arg_handler.size();
+    let pixmap = Arc::new(Pixmap::new(size.0, size.1));
+    println!("Canvas size: {}x{}", size.0, size.1);
 
     // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
-    thread::spawn(move || {
-        // First argument, the address to bind
-        let addr = env::args().nth(1).unwrap_or("127.0.0.1:8080".to_string());
-        let addr = addr.parse::<SocketAddr>().unwrap();
-
+    let host = arg_handler.host();
+    let server_thread = thread::spawn(move || {
         // Second argument, the number of threads we'll be using
-        let num_threads = env::args().nth(2).and_then(|s| s.parse().ok())
-            .unwrap_or(num_cpus::get());
+        let num_threads = num_cpus::get();
 
-        let listener = TcpListener::bind(&addr).expect("failed to bind");
-        println!("Listening on: {}", addr);
+        let listener = TcpListener::bind(&host).expect("failed to bind");
+        println!("Listening on: {}", host);
 
         // Spin up our worker threads, creating a channel routing to each worker
         // thread that we'll use below.
@@ -76,7 +78,13 @@ fn main() {
     });
 
     // Render the pixelflut screen
-    render(&pixmap);
+    if !arg_handler.no_render() {
+        render(&pixmap);
+    } else {
+        // Do not render, wait on the server thread instead
+        println!("Not rendering canvas, disabled with the --no-render flag");
+        server_thread.join().unwrap();
+    }
 }
 
 fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
