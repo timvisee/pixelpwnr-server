@@ -75,10 +75,13 @@ impl<'a> Renderer<'a> {
     }
 
     pub fn run(&mut self) {
+        // Get the size of the canvas
+        let size = self.pixmap.dimentions();
+
         // Define a window builder
         let builder = glutin::WindowBuilder::new()
             .with_title(self.title.to_string())
-            .with_dimensions(800, 600);
+            .with_dimensions(size.0 as u32, size.1 as u32);
 
         // Define the graphics context
         // TODO: properly configure this context
@@ -120,7 +123,7 @@ impl<'a> Renderer<'a> {
         let (vertex_buffer, mut slice) = plane.create_vertex_buffer(&mut factory);
 
         // Define the texture kind
-        let texture_kind = Kind::D2(800, 600, AaMode::Single);
+        let texture_kind = Kind::D2(size.0 as u16, size.1 as u16, AaMode::Single);
 
         // Create a base image
         let base_image = (
@@ -138,7 +141,7 @@ impl<'a> Renderer<'a> {
         // Rendering flags
         let mut running = true;
         let mut update = false;
-        let mut dimentions = (800.0, 600.0);
+        let mut dimentions = (size.0 as f32, size.1 as f32);
 
         // Keep rendering until we're done
         while running {
