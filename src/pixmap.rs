@@ -1,7 +1,7 @@
 use std::mem;
 use std::ptr;
 
-use super::color::Color;
+use color::Color;
 
 lazy_static! {
     /// The default color value for each pixel
@@ -62,33 +62,31 @@ impl Pixmap {
 
     /// Get the pixel at the given coordinate, as color.
     #[allow(dead_code)]
-    pub fn pixel(&self, x: usize, y: usize) -> Color {
-        Color::new(self.pixel_raw(x, y))
+    pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr> {
+        Ok(Color::new(self.pixel_raw(x, y)?))
     }
 
     /// Get the pixel at the given coordinate, as raw color value.
-    pub fn pixel_raw(&self, x: usize, y: usize) -> u32 {
-        // Determine the pixel index
-        let index = self.pixel_index(x, y);
-
-        // Get the pixel data
-        self.map[index]
+    pub fn pixel_raw(&self, x: usize, y: usize) -> Result<u32, PixmapErr> {
+        Ok(self.map[self.pixel_index(x, y)?])
     }
 
     /// Set the pixel at the given coordinate, to the given color.
-    pub fn set_pixel(&self, x: usize, y: usize, color: Color) {
-        self.set_pixel_raw(x, y, color.to_raw());
+    pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
+        self.set_pixel_raw(x, y, color.to_raw())
     }
 
     /// Set the pixel at the given coordinate, to the given raw color value.
-    pub fn set_pixel_raw(&self, x: usize, y: usize, raw: u32) {
+    pub fn set_pixel_raw(&self, x: usize, y: usize, raw: u32) -> Result<(), PixmapErr> {
         // Determine the pixel index
-        let index = self.pixel_index(x, y);
+        let index = self.pixel_index(x, y)?;
 
         // Write the pixel data
         unsafe {
             Pixmap::write_pixel_raw(&self.map, index, raw);
         }
+
+        Ok(())
     }
 
     /// Write raw pixel data to the given pixel `map`.
@@ -99,6 +97,9 @@ impl Pixmap {
     /// This operation is considered safe however, as the writen set of bytes
     /// is aligned.
     /// See the description of this struct for more information.
+    ///
+    /// Note: this method does not check for pixel index bounds, as it's only
+    /// used in this structure internally.
     unsafe fn write_pixel_raw(map: &Vec<u32>, i: usize, raw: u32) {
         // Create a mutable pointer, to the pixel data on the immutable pixel map
         let pixel_ptr: *mut u32 = (&map[i] as *const u32) as *mut u32;
@@ -108,9 +109,16 @@ impl Pixmap {
     }
 
     /// Get the index a pixel is at, for the given coordinate.
-    fn pixel_index(&self, x: usize, y: usize) -> usize {
-        // TODO: check bounds!
-        y * self.dimentions.0 + x
+    fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr> {
+        // Check pixel bounds
+        if x >= self.dimentions.0 {
+            return Err(PixmapErr::OutOfBound("x coordinate out of bound"));
+        } else if y >= self.dimentions.1 {
+            return Err(PixmapErr::OutOfBound("y coordinate out of bound"));
+        }
+
+        // Determine the index and return
+        Ok(y * self.dimentions.0 + x)
     }
 
     /// Get the pixelmap data, as slice with the raw color value of each
@@ -146,3 +154,10 @@ impl Pixmap {
 
 unsafe impl Send for Pixmap {}
 unsafe impl Sync for Pixmap {}
+
+/// An error representation for pixel map operations.
+#[derive(Debug)]
+pub enum PixmapErr<'a> {
+    /// The given pixel coordinate or index is out of bound.
+    OutOfBound(&'a str),
+}
