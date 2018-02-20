@@ -2,7 +2,7 @@ use std::io::Write;
 
 use atoi::atoi;
 use bytes::{BufMut, Bytes, BytesMut};
-use pixelpwnr_render::{Color, Pixmap};
+use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
 /// A set of pixel commands a client might send.
 ///
@@ -89,21 +89,30 @@ impl Cmd {
     }
 
     /// Invoke the command, and return the result.
-    pub fn invoke<'a>(self, pixmap: &Pixmap) -> CmdResult<'a> {
+    pub fn invoke<'a>(self, pixmap: &'a Pixmap) -> CmdResult {
         // Match the command, invoke the proper action
         match self {
             // Set the pixel on the pixel map
-            Cmd::SetPixel(x, y, color) => pixmap.set_pixel(x, y, color),
+            Cmd::SetPixel(x, y, color) =>
+                if let Err(err) = pixmap.set_pixel(x, y, color) {
+                    return CmdResult::from_pixmap_err(err);
+                }
 
             // Get a pixel color from the pixel map
             Cmd::GetPixel(x, y) => {
-                // Get the hexadecimal color value
-                let color = pixmap.pixel(x, y).hex();
+                // Get the color of the pixel
+                let color = pixmap.pixel(x, y);
+                if let Err(err) = color {
+                    return CmdResult::from_pixmap_err(err);
+                }
+
+                // Get the hexadecimal value of the color
+                let color = color.unwrap().hex();
 
                 // Build the response
                 let mut response = BytesMut::new().writer();
                 if write!(response, "PX {} {} {}", x, y, color).is_err() {
-                    return CmdResult::ServerErr("failed to write response to buffer");
+                    return CmdResult::ServerErr("failed to write response to buffer".into());
                 }
 
                 // Send the response
@@ -120,7 +129,7 @@ impl Cmd {
                 // Build the response
                 let mut response = BytesMut::new().writer();
                 if write!(response, "SIZE {} {}", x, y).is_err() {
-                    return CmdResult::ServerErr("failed to write response to buffer");
+                    return CmdResult::ServerErr("failed to write response to buffer".into());
                 }
 
                 // Send the response
@@ -168,7 +177,7 @@ impl Cmd {
 /// This result defines the status of the command that was invoked.
 /// Some response might need to be send to the client,
 /// or an error might have occurred.
-pub enum CmdResult<'a> {
+pub enum CmdResult {
     /// The command has been invoked successfully.
     Ok,
 
@@ -178,11 +187,21 @@ pub enum CmdResult<'a> {
 
     /// The following error occurred while invoking a command, based on the
     /// clients input.
-    ClientErr(&'a str),
+    ClientErr(String),
 
     /// The following error occurred while invoking a command on the server.
-    ServerErr(&'a str),
+    ServerErr(String),
 
     /// The connection should be closed.
     Quit,
+}
+
+impl CmdResult {
+    /// Build a command result from the given pixmap error that has occurred
+    /// when invoking a command.
+    pub fn from_pixmap_err(err: PixmapErr) -> CmdResult {
+        match err {
+            PixmapErr::OutOfBound(msg) => CmdResult::ClientErr(msg.into()),
+        }
+    }
 }
