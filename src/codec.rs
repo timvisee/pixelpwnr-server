@@ -6,7 +6,7 @@ use futures::prelude::*;
 use tokio::net::TcpStream;
 use tokio_io::AsyncRead;
 
-/// Line based codec
+/// Line based codec.
 ///
 /// This decorates a socket and presents a line based read / write interface.
 ///
@@ -98,7 +98,7 @@ impl Stream for Lines {
         // Keep trying to read until a line is read, or the connection closed
         loop {
             // First, read any new data into the read buffer
-            let sock_closed = self.fill_read_buf()?.is_ready();
+            let closed = self.fill_read_buf()?.is_ready();
 
             // Try finding lines
             // TODO: find any variation of new lines?
@@ -124,7 +124,7 @@ impl Stream for Lines {
             }
 
             // We don't have new data, or close the connection
-            if sock_closed {
+            if closed {
                 return Ok(Async::Ready(None));
             } else {
                 return Ok(Async::NotReady);

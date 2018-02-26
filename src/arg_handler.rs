@@ -27,7 +27,7 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .alias("host")
                 .value_name("HOST")
                 .help("Host to bind to \"host:port\"")
-                .default_value("127.0.0.1:1234")
+                .default_value("0.0.0.0:1234")
                 .display_order(1))
             .arg(Arg::with_name("no-render")
                 .long("no-render")
