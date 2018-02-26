@@ -1,3 +1,4 @@
+use std::fmt;
 use std::num::ParseIntError;
 
 /// The default alpha channel value, if not specified. (0xFF = opaque)
@@ -43,6 +44,26 @@ impl Color {
         )
     }
 
+    /// Get the red value, in the range `[0, 255)`.
+    pub fn red(&self) -> u8 {
+        (self.value & 0xFFFFFFFF) as u8
+    }
+
+    /// Get green green value, in the range `[0, 255)`.
+    pub fn green(&self) -> u8 {
+        (self.value & (0xFFFFFFFF << 8)) as u8
+    }
+
+    /// Get the blue value, in the range `[0, 255)`.
+    pub fn blue(&self) -> u8 {
+        (self.value & (0xFFFFFFFF << 16)) as u8
+    }
+
+    /// Get the alpha value, in the range `[0, 255)`.
+    pub fn alpha(&self) -> u8 {
+        (self.value & (0xFFFFFFFF << 24)) as u8
+    }
+
     /// Construct a new color, from the given hexadecimal string.
     ///
     /// If parsing the hexadecimal string failed, an error is returned.
@@ -73,5 +94,17 @@ impl Color {
     /// Get the raw color value, as single u32.
     pub fn to_raw(&self) -> u32 {
         self.value
+    }
+}
+
+impl fmt::Debug for Color {
+    /// Nicely format the color in a human readable RGB(A) format.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Only debug the alpha channel if it isn't the default value
+        if self.alpha() == 0 {
+            write!(f, "ColorRGB({}, {}, {})", self.red(), self.green(), self.blue())
+        } else {
+            write!(f, "ColorRGBA({}, {}, {}, {})", self.red(), self.green(), self.blue(), self.alpha())
+        }
     }
 }
