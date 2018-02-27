@@ -1,6 +1,7 @@
 use std::io;
 use std::sync::Arc;
 
+use bytes::{BufMut, BytesMut};
 use futures::prelude::*;
 use pixelpwnr_render::Pixmap;
 
@@ -100,9 +101,15 @@ impl Future for Client {
                     CmdResult::Ok => {},
 
                     // Respond to the client
-                    CmdResult::Response(bytes) =>
+                    CmdResult::Response(msg) => {
+                        // Create a bytes buffer with the message
+                        let mut bytes = BytesMut::with_capacity(msg.len());
+                        bytes.put_slice(msg.as_bytes());
+
+                        // Respond
                         self.respond(&bytes)
-                            .expect("failed to flush write buffer"),
+                            .expect("failed to flush write buffer");
+                    },
 
                     // Report the error to the user
                     CmdResult::ClientErr(err) => {

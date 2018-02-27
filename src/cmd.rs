@@ -111,15 +111,9 @@ impl Cmd {
                 // Get the hexadecimal value of the color
                 let color = color.unwrap().hex();
 
-                // Build the response
-                let mut response = BytesMut::new().writer();
-                if write!(response, "PX {} {} {}", x, y, color).is_err() {
-                    return CmdResult::ServerErr("failed to write response to buffer".into());
-                }
-
                 // Send the response
                 return CmdResult::Response(
-                    response.into_inner().freeze(),
+                    format!("PX {} {} {}", x, y, color),
                 );
             },
 
@@ -128,15 +122,9 @@ impl Cmd {
                 // Get the size
                 let (x, y) = pixmap.dimentions();
 
-                // Build the response
-                let mut response = BytesMut::new().writer();
-                if write!(response, "SIZE {} {}", x, y).is_err() {
-                    return CmdResult::ServerErr("failed to write response to buffer".into());
-                }
-
                 // Send the response
                 return CmdResult::Response(
-                    response.into_inner().freeze(),
+                    format!("SIZE {} {}", x, y),
                 );
             },
 
@@ -155,12 +143,8 @@ impl Cmd {
     }
 
     /// Get a list of command help, to respond to a client.
-    pub fn help_list() -> Bytes {
-        // Create a bytes buffer
-        let mut help = BytesMut::new();
-
-        // Append the commands
-        help.extend_from_slice(format!("\
+    pub fn help_list() -> String {
+        format!("\
             HELP {} v{}\r\n\
             HELP Commands:\r\n\
             HELP - PX <x> <y> <RRGGBB[AA]>\r\n\
@@ -168,10 +152,7 @@ impl Cmd {
             HELP - SIZE         >>  SIZE <width> <height>\r\n\
             HELP - HELP         >>  HELP ...\r\n\
             HELP - QUIT\
-        ", APP_NAME, APP_VERSION).as_bytes());
-
-        // Freeze the bytes, and return
-        help.freeze()
+        ", APP_NAME, APP_VERSION)
     }
 }
 
@@ -186,7 +167,7 @@ pub enum CmdResult {
 
     /// The command has been invoked successfully, and the following response
     /// should be send to the client.
-    Response(Bytes),
+    Response(String),
 
     /// The following error occurred while invoking a command, based on the
     /// clients input.

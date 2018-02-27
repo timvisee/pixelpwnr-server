@@ -122,6 +122,3 @@ fn render(pixmap: &Pixmap) {
     let mut renderer = Renderer::new(APP_NAME, pixmap);
     renderer.run();
 }
-
-
-
