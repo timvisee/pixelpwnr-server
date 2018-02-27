@@ -32,6 +32,8 @@ impl Client {
     /// Respond to the client with the given response.
     ///
     /// A new line is automatically appended to the response.
+    ///
+    /// This blocks until the written data is flushed to the client.
     pub fn respond(&mut self, response: &[u8]) -> Result<(), io::Error> {
         // Write to the buffer
         self.lines.buffer(response);
@@ -40,12 +42,15 @@ impl Client {
         // Flush the write buffer to the socket
         // TODO: don't wait on this, flush in the background?
         self.lines.poll_flush()?;
+
         Ok(())
     }
 
     /// Respond to the client with the given response as a string.
     ///
     /// A new line is automatically appended to the response.
+    ///
+    /// This blocks until the written data is flushed to the client.
     pub fn respond_str(&mut self, response: String) -> Result<(), io::Error> {
         self.respond(response.as_bytes())
     }
@@ -68,9 +73,6 @@ impl Future for Client {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<(), io::Error> {
-        // Flush the write buffer to the socket
-        let _ = self.lines.poll_flush()?;
-
         // Read new lines from the socket
         while let Async::Ready(line) = self.lines.poll()? {
             if let Some(message) = line {

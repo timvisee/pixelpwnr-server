@@ -16,5 +16,5 @@ pixelpwnr-render = { path = "../pixelpwnr-render" }
 tokio = "0.1"
 tokio-io = "0.1"
 
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
