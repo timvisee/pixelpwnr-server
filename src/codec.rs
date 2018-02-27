@@ -95,40 +95,45 @@ impl Stream for Lines {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // Keep trying to read until a line is read, or the connection closed
-        loop {
-            // First, read any new data into the read buffer
-            let closed = self.fill_read_buf()?.is_ready();
+        // First, read any new data into the read buffer
+        let closed = self.fill_read_buf()?.is_ready();
 
-            // Try finding lines
-            // TODO: find any variation of new lines?
-            let pos = self.rd
-                .windows(2)
-                .position(|bytes| bytes == b"\r\n");
+        // Make sure the buffer has some data in it
+        if self.rd.len() <= 1 {
+            return Ok(Async::NotReady);
+        }
 
-            // Get the line, return it
-            if let Some(pos) = pos {
-                // Pull the line of the read buffer
-                let mut line = self.rd.split_to(pos + 2);
+        // Try finding lines
+        // TODO: find any variation of new lines?
+        let pos = self.rd
+            .windows(2)
+            .position(|bytes| bytes == b"\r\n");
 
-                // Skip empty lines
-                if pos == 0 {
-                    continue;
-                }
+        // TODO: if no new line was found, and the buffer is full,
+        // drop the connection as the received frame was too large.
 
-                // Drop trailing new line characters
-                line.split_off(pos);
+        // Get the line, return it
+        if let Some(pos) = pos {
+            // Pull the line of the read buffer
+            let mut line = self.rd.split_to(pos + 2);
 
-                // Return the line
-                return Ok(Async::Ready(Some(line)));
+            // Skip empty lines
+            if pos == 0 {
+                return self.poll();
             }
 
-            // We don't have new data, or close the connection
-            if closed {
-                return Ok(Async::Ready(None));
-            } else {
-                return Ok(Async::NotReady);
-            }
+            // Drop trailing new line characters
+            line.split_off(pos);
+
+            // Return the line
+            return Ok(Async::Ready(Some(line)));
+        }
+
+        // We don't have new data, or close the connection
+        if closed {
+            return Ok(Async::Ready(None));
+        } else {
+            return Ok(Async::NotReady);
         }
     }
 }
