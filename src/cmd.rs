@@ -1,7 +1,5 @@
-use std::io::Write;
-
 use atoi::atoi;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
 use app::{APP_NAME, APP_VERSION};
