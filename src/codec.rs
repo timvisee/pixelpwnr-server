@@ -6,15 +6,29 @@ use futures::prelude::*;
 use tokio::net::TcpStream;
 use tokio_io::AsyncRead;
 
-/// The capacity of the read and write buffer.
+/// The capacity of the read and write buffer in bytes.
 const BUF_SIZE: usize = 64_000;
 
-/// The threshold length on which to fill the buffer again.
+/// The threshold length on which to fill the buffer again in bytes.
+///
 /// When this threshold is reached, new memory may be allocated in the buffer
 /// to satisfy the preferred buffer capacity.
 /// This theshold must be larger than the longest frame we might receive over
 /// the network, or else the frame might be incomplete when read.
+///
+/// Should be less than `BUF_SIZE` to prevent constant socket reads.
 const BUF_THRESHOLD: usize = 16_000;
+
+/// The maximum length of a line in bytes.
+/// If a received line is longer than than the specified amount of bytes,
+/// the search for a newline character (marking the end of a line) will be stalled,
+/// and the line stream will end.
+/// This is to prevent the stream from blocking, when no complete line could be read from a
+/// full buffer.
+///
+/// This value must be smaller than `BUF_THRESHOLD` to prevent the server from getting
+/// stuck as it can't find the end of a line within a full buffer.
+const LINE_MAX_LENGTH: usize = 1024;
 
 /// Line based codec.
 ///
@@ -111,8 +125,8 @@ impl Stream for Lines {
         // First, read any new data into the read buffer
         let closed = self.fill_read_buf()?.is_ready();
 
-        // Make sure the buffer has some data in it
-        if self.rd.len() <= 1 {
+        // Make sure the buffer has enough data in it to be a valid command
+        if self.rd.len() < 2 {
             return Ok(Async::NotReady);
         }
 
@@ -120,10 +134,8 @@ impl Stream for Lines {
         // TODO: find any variation of new lines?
         let pos = self.rd
             .windows(2)
+            .take(LINE_MAX_LENGTH)
             .position(|bytes| bytes == b"\r\n");
-
-        // TODO: if no new line was found, and the buffer is full,
-        // drop the connection as the received frame was too large.
 
         // Get the line, return it
         if let Some(pos) = pos {
@@ -140,6 +152,19 @@ impl Stream for Lines {
 
             // Return the line
             return Ok(Async::Ready(Some(line)));
+        }
+
+        // If no line ending was found, and the buffer is larger than the
+        // maximum command length, disconnect
+        if self.rd.len() > LINE_MAX_LENGTH {
+            // TODO: report this error to the client
+            println!(
+                "Client sent a line longer than {} characters, disconnecting",
+                LINE_MAX_LENGTH,
+            );
+
+            // Break the connection, by ending the lines stream
+            return Ok(Async::Ready(None));
         }
 
         // We don't have new data, or close the connection
