@@ -80,8 +80,8 @@ impl Future for Client {
                 // Get the input we're working with
                 let input = message.freeze();
 
-                // Parse the command to run
-                let cmd = match Cmd::parse(input) {
+                // Decode the command to run
+                let cmd = match Cmd::decode(input) {
                     Err(err) => {
                         // Report the error to the client
                         self.respond_str(format!("ERR {}", err))

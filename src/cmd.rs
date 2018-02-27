@@ -35,14 +35,14 @@ pub enum Cmd {
 }
 
 impl Cmd {
-    /// Parse the command to run, from the given input bytes.
-    pub fn parse<'a>(input: Bytes) -> Result<Self, &'a str> {
+    /// Decode the command to run, from the given input bytes.
+    pub fn decode<'a>(input: Bytes) -> Result<Self, &'a str> {
         // Iterate over input parts
         let mut input = input
             .split(|b| b == &b' ')
             .filter(|part| !part.is_empty());
 
-        // Parse the command
+        // Decode the command
         match input.next() {
             Some(cmd) => match cmd {
                 // Pixel command
