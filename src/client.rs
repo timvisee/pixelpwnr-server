@@ -80,16 +80,16 @@ impl Future for Client {
                 let input = message.freeze();
 
                 // Parse the command to run
-                let cmd = Cmd::parse(input);
-                if let Err(err) = cmd {
-                    // Report the error to the client
-                    self.respond_str(format!("ERR {}", err))
-                        .expect("failed to flush write buffer");
+                let cmd = match Cmd::parse(input) {
+                    Err(err) => {
+                        // Report the error to the client
+                        self.respond_str(format!("ERR {}", err))
+                            .expect("failed to flush write buffer");
 
-                    // TODO: disconnect the client
-                    continue;
-                }
-                let cmd = cmd.unwrap();
+                        continue;
+                    },
+                    Ok(cmd) => cmd,
+                };
 
                 // Invoke the command, and catch the result
                 let result = cmd.invoke(&self.pixmap);

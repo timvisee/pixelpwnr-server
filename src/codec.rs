@@ -6,6 +6,16 @@ use futures::prelude::*;
 use tokio::net::TcpStream;
 use tokio_io::AsyncRead;
 
+/// The capacity of the read and write buffer.
+const BUF_SIZE: usize = 64_000;
+
+/// The threshold length on which to fill the buffer again.
+/// When this threshold is reached, new memory may be allocated in the buffer
+/// to satisfy the preferred buffer capacity.
+/// This theshold must be larger than the longest frame we might receive over
+/// the network, or else the frame might be incomplete when read.
+const BUF_THRESHOLD: usize = 16_000;
+
 /// Line based codec.
 ///
 /// This decorates a socket and presents a line based read / write interface.
@@ -32,8 +42,8 @@ impl Lines {
     pub fn new(socket: TcpStream) -> Self {
         Lines {
             socket,
-            rd: BytesMut::new(),
-            wr: BytesMut::new(),
+            rd: BytesMut::with_capacity(BUF_SIZE),
+            wr: BytesMut::with_capacity(BUF_SIZE),
         }
     }
 
@@ -59,10 +69,6 @@ impl Lines {
             // equivalent to `Async::NotReady.
             let n = try_nb!(self.socket.write(&self.wr));
 
-            // As long as the wr is not empty, a successful write should
-            // never write 0 bytes.
-            assert!(n > 0);
-
             // This discards the first `n` bytes of the buffer.
             let _ = self.wr.split_to(n);
         }
@@ -70,23 +76,30 @@ impl Lines {
         Ok(Async::Ready(()))
     }
 
-    /// Read data from the socket.
+    /// Read data from the socket if the buffer isn't full enough,
+    /// and it's length reached the lower size threshold.
     ///
-    /// This only returns `Ready` when the socket has closed.
+    /// If the size threshold is reached, and there isn't enough data
+    /// in the buffer, memory is allocated to give the buffer enough capacity.
+    /// The buffer is then filled with data from the socket with all the data
+    /// that is available.
     fn fill_read_buf(&mut self) -> Poll<(), io::Error> {
-        loop {
-            // Ensure the read buffer has capacity.
-            //
-            // This might result in an internal allocation.
-            self.rd.reserve(1024);
+        // Get the length of buffer contents
+        let len = self.rd.len();
 
-            // Read data into the buffer.
-            let n = try_ready!(self.socket.read_buf(&mut self.rd));
-
-            if n == 0 {
-                return Ok(Async::Ready(()));
-            }
+        // We've enough data to continue
+        if len > BUF_THRESHOLD {
+            return Ok(Async::Ready(()));
         }
+
+        // Allocate enough capacity to fill the buffer
+        self.rd.reserve(BUF_SIZE - len);
+
+        // Read data and try to fill the buffer
+        try_ready!(self.socket.read_buf(&mut self.rd));
+
+        // We're done reading
+        return Ok(Async::Ready(()));
     }
 }
 
