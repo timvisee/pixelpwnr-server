@@ -4,6 +4,8 @@ use atoi::atoi;
 use bytes::{BufMut, Bytes, BytesMut};
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
+use app::{APP_NAME, APP_VERSION};
+
 /// A set of pixel commands a client might send.
 ///
 /// These commands may then be invoked on the pixel map state.
@@ -158,14 +160,15 @@ impl Cmd {
         let mut help = BytesMut::new();
 
         // Append the commands
-        help.extend_from_slice(b"\
+        help.extend_from_slice(format!("\
+            HELP {} v{}\r\n\
             HELP Commands:\r\n\
             HELP - PX <x> <y> <RRGGBB[AA]>\r\n\
             HELP - PX <x> <y>   >>  PX <x> <y> <RRGGBB>\r\n\
             HELP - SIZE         >>  SIZE <width> <height>\r\n\
             HELP - HELP         >>  HELP ...\r\n\
             HELP - QUIT\
-        ");
+        ", APP_NAME, APP_VERSION).as_bytes());
 
         // Freeze the bytes, and return
         help.freeze()
