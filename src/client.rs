@@ -7,6 +7,7 @@ use pixelpwnr_render::Pixmap;
 
 use cmd::{Cmd, CmdResult};
 use codec::Lines;
+use stats::Stats;
 
 /// The state for each connected client.
 pub struct Client {
@@ -19,14 +20,18 @@ pub struct Client {
 
     /// A pixel map.
     pixmap: Arc<Pixmap>,
+
+    /// A stats manager.
+    stats: Arc<Stats>,
 }
 
 impl Client {
     /// Create a new instance of `Client`.
-    pub fn new(lines: Lines, pixmap: Arc<Pixmap>) -> Client {
+    pub fn new(lines: Lines, pixmap: Arc<Pixmap>, stats: Arc<Stats>) -> Client {
         Client {
             lines,
             pixmap,
+            stats,
         }
     }
 
@@ -93,7 +98,7 @@ impl Future for Client {
                 };
 
                 // Invoke the command, and catch the result
-                let result = cmd.invoke(&self.pixmap);
+                let result = cmd.invoke(&self.pixmap, &self.stats);
 
                 // Do something with the result
                 match result {

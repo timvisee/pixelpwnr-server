@@ -1,3 +1,5 @@
+#![feature(integer_atomics)]
+
 extern crate atoi;
 extern crate bufstream;
 extern crate bytes;
@@ -16,14 +18,17 @@ mod arg_handler;
 mod client;
 mod cmd;
 mod codec;
+mod stats;
+mod stat_monitor;
 
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use futures::prelude::*;
 use futures::future::Executor;
 use futures::sync::mpsc;
-use futures_cpupool::CpuPool;
+use futures_cpupool::Builder;
 use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpStream, TcpListener};
 
@@ -31,6 +36,7 @@ use app::APP_NAME;
 use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
+use stats::Stats;
 
 // TODO: use some constant for new lines
 
@@ -44,8 +50,12 @@ fn main() {
     let pixmap = Arc::new(Pixmap::new(size.0, size.1));
     println!("Canvas size: {}x{}", size.0, size.1);
 
+    // Build a stats manager
+    let stats = Arc::new(Stats::new());
+
     // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
+    let stats_thread = stats.clone();
     let host = arg_handler.host();
     let server_thread = thread::spawn(move || {
         // Second argument, the number of threads we'll be using
@@ -61,7 +71,8 @@ fn main() {
             let (tx, rx) = mpsc::unbounded();
             channels.push(tx);
             let pixmap_worker = pixmap_thread.clone();
-            thread::spawn(|| worker(rx, pixmap_worker));
+            let stats_worker = stats_thread.clone();
+            thread::spawn(|| worker(rx, pixmap_worker, stats_worker));
         }
 
         // Infinitely accept sockets from our `TcpListener`. Each socket is then
@@ -77,6 +88,16 @@ fn main() {
         srv.wait().unwrap();
     });
 
+    // Create a thread that reports stats
+    // TODO: improve this reporter thread implementation
+    let stats_reporter = stats.clone();
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(5));
+            stats_reporter.report();
+        }
+    });
+
     // Render the pixelflut screen
     if !arg_handler.no_render() {
         render(&pixmap);
@@ -87,9 +108,13 @@ fn main() {
     }
 }
 
-fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
-    // TODO: Define a better pool size
-    let pool = CpuPool::new(1);
+fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
+    // Build a CPU pool
+    // TODO: share a CPU pool across all workers
+    let pool = Builder::new()
+        .pool_size(1)
+        .name_prefix(format!("{}-worker", APP_NAME))
+        .create();
 
     let done = rx.for_each(move |socket| {
         // A client connected, ensure we're able to get it's address
@@ -98,10 +123,10 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>) {
 
         // Wrap the socket with the Lines codec,
         // to interact with lines instead of raw bytes
-        let lines = Lines::new(socket);
+        let lines = Lines::new(socket, stats.clone());
 
         // Define a client as connection
-        let connection = Client::new(lines, pixmap.clone())
+        let connection = Client::new(lines, pixmap.clone(), stats.clone())
             .map_err(|e| {
                 println!("connection error = {:?}", e);
             });

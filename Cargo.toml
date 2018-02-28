@@ -11,8 +11,10 @@ clap = "2.30"
 futures = "0.1"
 futures-cpupool = "0.1"
 num_cpus = "1.8"
+number_prefix = "0.2"
 pixelpwnr-render = { path = "../pixelpwnr-render" }
 # pixelpwnr-render = { git = "https://github.com/timvisee/pixelpwnr-render.git" }
+time = "0.1"
 tokio = "0.1"
 tokio-io = "0.1"
 

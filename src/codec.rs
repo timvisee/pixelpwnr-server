@@ -1,10 +1,13 @@
 use std::io;
 use std::io::prelude::*;
+use std::sync::Arc;
 
 use bytes::BytesMut;
 use futures::prelude::*;
 use tokio::net::TcpStream;
 use tokio_io::AsyncRead;
+
+use stats::Stats;
 
 /// The capacity of the read and write buffer in bytes.
 const BUF_SIZE: usize = 64_000;
@@ -49,15 +52,19 @@ pub struct Lines {
 
     /// Buffer used to stage data before writing it to the socket.
     wr: BytesMut,
+
+    /// Server stats.
+    stats: Arc<Stats>,
 }
 
 impl Lines {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: TcpStream) -> Self {
+    pub fn new(socket: TcpStream, stats: Arc<Stats>) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
             wr: BytesMut::with_capacity(BUF_SIZE),
+            stats,
         }
     }
 
@@ -109,8 +116,9 @@ impl Lines {
         // Allocate enough capacity to fill the buffer
         self.rd.reserve(BUF_SIZE - len);
 
-        // Read data and try to fill the buffer
-        try_ready!(self.socket.read_buf(&mut self.rd));
+        // Read data and try to fill the buffer, update the statistics
+        let amount = try_ready!(self.socket.read_buf(&mut self.rd));
+        self.stats.inc_bytes_read(amount);
 
         // We're done reading
         return Ok(Async::Ready(()));

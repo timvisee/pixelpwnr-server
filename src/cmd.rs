@@ -3,6 +3,7 @@ use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
 use app::{APP_NAME, APP_VERSION};
+use stats::Stats;
 
 /// A set of pixel commands a client might send.
 ///
@@ -89,25 +90,27 @@ impl Cmd {
     }
 
     /// Invoke the command, and return the result.
-    pub fn invoke<'a>(self, pixmap: &'a Pixmap) -> CmdResult {
+    pub fn invoke<'a>(self, pixmap: &'a Pixmap, stats: &Stats) -> CmdResult {
         // Match the command, invoke the proper action
         match self {
             // Set the pixel on the pixel map
-            Cmd::SetPixel(x, y, color) =>
+            Cmd::SetPixel(x, y, color) => {
+                // Update the pixel statistics
+                stats.inc_pixels();
+
+                // Set the pixel
                 if let Err(err) = pixmap.set_pixel(x, y, color) {
                     return CmdResult::from_pixmap_err(err);
                 }
+            },
 
             // Get a pixel color from the pixel map
             Cmd::GetPixel(x, y) => {
-                // Get the color of the pixel
-                let color = pixmap.pixel(x, y);
-                if let Err(err) = color {
-                    return CmdResult::from_pixmap_err(err);
-                }
-
-                // Get the hexadecimal value of the color
-                let color = color.unwrap().hex();
+                // Get the hexadecimal color value of a pixel
+                let color = match pixmap.pixel(x, y) {
+                    Err(err) => return CmdResult::from_pixmap_err(err),
+                    Ok(color) => color.hex(),
+                };
 
                 // Send the response
                 return CmdResult::Response(
