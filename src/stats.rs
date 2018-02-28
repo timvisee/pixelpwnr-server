@@ -47,6 +47,15 @@ impl Stats {
     }
 
     /// Get the total number of pixels that have been written to the screen
+    /// by clients as a string in a humanly readable format.
+    pub fn pixels_human(&self) -> String {
+        match decimal_prefix(self.pixels() as f64) {
+            Standalone(b) => format!("{} P", b),
+            Prefixed(p, n) => format!("{:.02} {}P", n, p),
+        }
+    }
+
+    /// Get the total number of pixels that have been written to the screen
     /// by clients in the last second. The returned value is approximate.
     ///
     /// If the number of pixels in this second couldn't be determined
@@ -56,6 +65,23 @@ impl Stats {
         self.pixels_monitor.lock()
             .ok()?
             .update(self.pixels())
+    }
+
+    /// Get the total number of pixels that have been written to the screen
+    /// by clients in the last second as a string in a humanly readable
+    /// format. The returned value is approximate.
+    ///
+    /// If the number of pixels in this second couldn't be determined
+    /// reliably, `None` is returned.
+    pub fn pixels_sec_human(&self) -> String {
+        match self.pixels_sec() {
+            Some(px) =>
+                match decimal_prefix(px as f64) {
+                    Standalone(b) => format!("{} P/s", b),
+                    Prefixed(p, n) => format!("{:.02} {}P/s", n, p),
+                },
+            None => String::from("?"),
+        }
     }
 
     /// Increase the number of pixels that have been written to the screen by
@@ -74,6 +100,15 @@ impl Stats {
         self.bytes_read.load(Ordering::Relaxed)
     }
 
+    /// Get the total number of bytes that have been read from clients
+    /// as a string in a humanly readable format.
+    pub fn bytes_read_human(&self) -> String {
+        match binary_prefix(self.bytes_read() as f64) {
+            Standalone(b) => format!("{} B", b),
+            Prefixed(p, n) => format!("{:.02} {}B", n, p),
+        }
+    }
+
     /// Get the total number of bytes that have been read from clients in the
     /// last second. The returned value is approximate.
     ///
@@ -84,6 +119,23 @@ impl Stats {
         self.bytes_read_monitor.lock()
             .ok()?
             .update(self.bytes_read())
+    }
+
+    /// Get the total number of bytes that have been read from clients in the
+    /// last second as a string in a humanly readable format.
+    /// The returned value is approximate.
+    ///
+    /// If the number of read bytes in this second couldn't be determined
+    /// reliably, `None` is returned.
+    pub fn bytes_read_sec_human(&self) -> String {
+        match self.bytes_read_sec() {
+            Some(bytes) =>
+                match decimal_prefix((bytes * 8) as f64) {
+                    Standalone(b) => format!("{} bps", b),
+                    Prefixed(p, n) => format!("{:.02} {}b/s", n, p),
+                },
+            None => String::from("?"),
+        }
     }
 
     /// Increase the number of bytes that have been read from clients by the
@@ -97,29 +149,16 @@ impl Stats {
         self.bytes_read.fetch_add(amount as u64, Ordering::SeqCst);
     }
 
-    /// Report stats to the console.
+    /// Report the current stats to stdout.
     pub fn report(&self) {
-        println!(
-            "\n\
-                {: <11} {: <15} {: <12}\n\
-                {: <11} {: <15} {: <12}\n\
-                {: <11} {: <15} {: <12}\
+        println!("
+                {: <7} {: <15} {: <12}\n\
+                {: <7} {: <15} {: <12}\n\
+                {: <7} {: <15} {: <12}\
             ",
-            "STATS",
-            "Total:",
-            "Per sec:",
-            "Pixels:",
-            self.pixels(),
-            self.pixels_sec().unwrap_or(0),
-            "Bytes read:",
-            match binary_prefix(self.bytes_read() as f64) {
-                Standalone(b) => format!("{} bytes", b),
-                Prefixed(p, n) => format!("{:.03} {}B", n, p),
-            },
-            match decimal_prefix(self.bytes_read_sec().unwrap_or(0) as f64 * 8f64) {
-                Standalone(b) => format!("{} bps", b),
-                Prefixed(p, n) => format!("{:.03} {}bps", n, p),
-            },
+            "STATS",   "Total:",                "Per sec:",
+            "Pixels:", self.pixels_human(),     self.pixels_sec_human(),
+            "Input:",  self.bytes_read_human(), self.bytes_read_sec_human(),
         );
     }
 }

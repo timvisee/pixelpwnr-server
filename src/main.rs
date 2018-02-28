@@ -100,7 +100,7 @@ fn main() {
 
     // Render the pixelflut screen
     if !arg_handler.no_render() {
-        render(&pixmap);
+        render(&pixmap, stats);
     } else {
         // Do not render, wait on the server thread instead
         println!("Not rendering canvas, disabled with the --no-render flag");
@@ -142,8 +142,28 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Ar
 }
 
 /// Start the pixel map renderer.
-fn render(pixmap: &Pixmap) {
-    // Build and run the renderer
+fn render(pixmap: &Pixmap, stats: Arc<Stats>) {
+    // Build the renderer
     let mut renderer = Renderer::new(APP_NAME, pixmap);
+
+    // Borrow the statistics text
+    let stats_text = renderer.stats().text();
+
+    // Update the statistics text each second in a separate thread
+    thread::spawn(move || {
+        loop {
+            // Sleep for a second
+            thread::sleep(Duration::from_secs(1));
+
+            // Update the text
+            *stats_text.lock().unwrap() = format!(
+                "px: {}   input: {}",
+                stats.pixels_sec_human(),
+                stats.bytes_read_sec_human(),
+            );
+        }
+    });
+
+    // Render the canvas
     renderer.run();
 }

@@ -47,11 +47,16 @@ impl StatMonitor {
         }
 
         // Unwrap the values
-        let passed = passed.unwrap();
+        let passed = (passed.unwrap() as u64) / 1_000_000u64;
         let delta = delta.unwrap();
 
+        // Make sure some time has passed
+        if passed == 0 {
+            return None;
+        }
+
         // Calculate the growth this second, and return
-        Some((delta as u64) / ((passed as u64) / 1_000_000u64))
+        Some((delta as u64) / passed)
     }
 }
 
