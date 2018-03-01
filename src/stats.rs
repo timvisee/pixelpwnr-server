@@ -60,7 +60,7 @@ impl Stats {
     ///
     /// If the number of pixels in this second couldn't be determined
     /// reliably, `None` is returned.
-    pub fn pixels_sec(&self) -> Option<u64> {
+    pub fn pixels_sec(&self) -> Option<f64> {
         // Get a lock on the value monitor, update and retrieve the result
         self.pixels_monitor.lock()
             .ok()?
@@ -76,11 +76,11 @@ impl Stats {
     pub fn pixels_sec_human(&self) -> String {
         match self.pixels_sec() {
             Some(px) =>
-                match decimal_prefix(px as f64) {
+                match decimal_prefix(px) {
                     Standalone(b) => format!("{} P/s", b),
                     Prefixed(p, n) => format!("{:.02} {}P/s", n, p),
                 },
-            None => String::from("?"),
+            None => String::from("~"),
         }
     }
 
@@ -114,7 +114,7 @@ impl Stats {
     ///
     /// If the number of read bytes in this second couldn't be determined
     /// reliably, `None` is returned.
-    pub fn bytes_read_sec(&self) -> Option<u64> {
+    pub fn bytes_read_sec(&self) -> Option<f64> {
         // Get a lock on the value monitor, update and retrieve the result
         self.bytes_read_monitor.lock()
             .ok()?
@@ -130,11 +130,11 @@ impl Stats {
     pub fn bytes_read_sec_human(&self) -> String {
         match self.bytes_read_sec() {
             Some(bytes) =>
-                match decimal_prefix((bytes * 8) as f64) {
-                    Standalone(b) => format!("{} bps", b),
+                match decimal_prefix(bytes * 8f64) {
+                    Standalone(b) => format!("{} b/s", b),
                     Prefixed(p, n) => format!("{:.02} {}b/s", n, p),
                 },
-            None => String::from("?"),
+            None => String::from("~"),
         }
     }
 
