@@ -50,7 +50,7 @@ impl Stats {
     /// by clients as a string in a humanly readable format.
     pub fn pixels_human(&self) -> String {
         match decimal_prefix(self.pixels() as f64) {
-            Standalone(b) => format!("{} P", b),
+            Standalone(b) => format!("{:.00} P", b.ceil()),
             Prefixed(p, n) => format!("{:.02} {}P", n, p),
         }
     }
@@ -77,7 +77,7 @@ impl Stats {
         match self.pixels_sec() {
             Some(px) =>
                 match decimal_prefix(px) {
-                    Standalone(b) => format!("{} P/s", b),
+                    Standalone(b) => format!("{:.00} P/s", b.ceil()),
                     Prefixed(p, n) => format!("{:.02} {}P/s", n, p),
                 },
             None => String::from("~"),
@@ -104,7 +104,7 @@ impl Stats {
     /// as a string in a humanly readable format.
     pub fn bytes_read_human(&self) -> String {
         match binary_prefix(self.bytes_read() as f64) {
-            Standalone(b) => format!("{} B", b),
+            Standalone(b) => format!("{:.00} B", b.ceil()),
             Prefixed(p, n) => format!("{:.02} {}B", n, p),
         }
     }
@@ -131,7 +131,7 @@ impl Stats {
         match self.bytes_read_sec() {
             Some(bytes) =>
                 match decimal_prefix(bytes * 8f64) {
-                    Standalone(b) => format!("{} b/s", b),
+                    Standalone(b) => format!("{:.00} b/s", b.ceil()),
                     Prefixed(p, n) => format!("{:.02} {}b/s", n, p),
                 },
             None => String::from("~"),

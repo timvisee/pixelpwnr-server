@@ -13,14 +13,14 @@ const TICKS_MAX: usize = 10;
 /// The minimum allowed interval between registered ticks.
 /// This prevents too many ticks from being collected in a short time frame,
 /// possibly making the result unreliable.
-const TICKS_MIN_INTERVAL_MICRO: u64 = 1_000_000 / 10;
+const TICKS_MIN_INTERVAL_MICRO: u64 = 100_000;
 
 /// The maximum age of a registered tick.
 /// This prevents old and now incorrect data from affecting the calculation.
 /// If the tick has been registered longer ago than the specified age, it is
 /// dropped.
 /// This value is also the maximum period the calculated result is averaged at.
-const TICKS_MAX_AGE_MICRO: u64 = 1_000_000 * 3;
+const TICKS_MAX_AGE_MICRO: u64 = 2_500_000;
 
 /// A monitor, that measures a cumulative value over time to report how much
 /// the value grows each second.
