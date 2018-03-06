@@ -108,20 +108,20 @@ impl StatMonitor {
     /// The precision depends on the `TICKS_MAX`, `TICKS_MAX_AGE_MICRO`
     /// constant values, and on the data that is available.
     fn calculate(&self) -> Option<f64> {
-        // There must be at least two known ticks
+        // There must be at least two known ticks to approximate a result
         if self.ticks.len() < 2 {
             return None;
         }
 
-        // Get oldest and newest timings and values
+        // Get the oldest and newest timings to calculate with
         let old = self.ticks.last().unwrap();
         let new = self.ticks.first().unwrap();
 
-        // Calculate the value and time difference
+        // Determine the difference in value and time
         let delta = (new.0 - old.0) as f64;
         let passed = old.1.to(new.1).num_microseconds().unwrap() as f64;
 
-        // Calculate the difference and return
+        // Return the approximate the value change each second
         Some(delta / passed * 1_000_000f64)
     }
 }
