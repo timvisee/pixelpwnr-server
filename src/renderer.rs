@@ -1,7 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use gfx;
-use gfx::Device;
+use gfx::{Device, Factory};
+use gfx::handle::ShaderResourceView;
 use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
+use gfx_device_gl;
 use gfx_window_glutin as gfx_glutin;
 use glutin;
 use glutin::{
@@ -13,6 +17,7 @@ use glutin::{
     KeyboardInput,
     Robustness,
     VirtualKeyCode,
+    WindowBuilder,
 };
 use glutin::Event::WindowEvent;
 use glutin::WindowEvent::{
@@ -24,10 +29,14 @@ use glutin::WindowEvent::{
 use fps_counter::FpsCounter;
 use pixmap::Pixmap;
 use primitive::create_quad;
+use stats_renderer::{Corner, StatsRenderer};
 use vertex::Vertex;
 
+/// Define used types
 pub type ColorFormat = gfx::format::Rgba8;
 pub type DepthFormat = gfx::format::DepthStencil;
+type F = gfx_device_gl::Factory;
+type R = gfx_device_gl::Resources;
 
 /// Black color definition with 4 channels.
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -49,6 +58,9 @@ pub struct Renderer<'a> {
     // Pixel map holding the screen data. 
     pixmap: &'a Pixmap,
 
+    // Used to render statistics on the canvas.
+    stats: StatsRenderer<F, R>,
+
     // Glutin events loop.
     events_loop: EventsLoop,
 
@@ -69,6 +81,7 @@ impl<'a> Renderer<'a> {
         Renderer {
             title,
             pixmap,
+            stats: StatsRenderer::new(Corner::TopLeft),
             events_loop: glutin::EventsLoop::new(),
             fps: FpsCounter::new(),
         }
@@ -79,7 +92,7 @@ impl<'a> Renderer<'a> {
         let size = self.pixmap.dimentions();
 
         // Define a window builder
-        let builder = glutin::WindowBuilder::new()
+        let builder = WindowBuilder::new()
             .with_title(self.title.to_string())
             .with_dimensions(size.0 as u32, size.1 as u32);
 
@@ -135,8 +148,12 @@ impl<'a> Renderer<'a> {
         let mut data = pipe::Data {
             vbuf: vertex_buffer,
             image: base_image,
-            out: main_color,
+            out: main_color.clone(),
         };
+
+        // Build the stats renderer
+        self.stats.init(factory.clone(), 20);
+        self.stats.set_text("telnet localhost 1234".into());
 
         // Rendering flags
         let mut running = true;
@@ -202,6 +219,8 @@ impl<'a> Renderer<'a> {
             // Draw through the pipeline
             encoder.draw(&slice, &pso, &data);
 
+            self.stats.draw(&mut encoder, &main_color).unwrap();
+
             encoder.flush(&mut device);
 
             // Swap the frame buffers
@@ -210,17 +229,20 @@ impl<'a> Renderer<'a> {
             device.cleanup();
 
             // Tick the FPS counter
-            self.fps.tick();
+            //self.fps.tick();
         }
     }
 
+    pub fn stats(&self) -> &StatsRenderer<F, R> {
+        &self.stats
+    }
+
     /// Load a texture from the given `path`.
-    fn create_texture<F, R>(factory: &mut F, data: &[u8], kind: gfx::texture::Kind)
-        -> gfx::handle::ShaderResourceView<R, [f32; 4]>
-        where
-            F: gfx::Factory<R>,
-            R: gfx::Resources,
-    {
+    fn create_texture(
+        factory: &mut F,
+        data: &[u8],
+        kind: Kind,
+    ) -> ShaderResourceView<R, [f32; 4]> {
         // Create a GPU texture
         // TODO: make sure the mipmap state is correct
         let (_, view) = factory.create_texture_immutable_u8::<ColorFormat>(
