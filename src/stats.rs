@@ -3,7 +3,12 @@ extern crate number_prefix;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use self::number_prefix::{binary_prefix, decimal_prefix, Standalone, Prefixed};
+use self::number_prefix::{
+    binary_prefix,
+    decimal_prefix,
+    Standalone,
+    Prefixed,
+};
 
 use stat_monitor::StatMonitor;
 
@@ -147,18 +152,5 @@ impl Stats {
     /// poisoning the statistics.
     pub fn inc_bytes_read(&self, amount: usize) {
         self.bytes_read.fetch_add(amount as u64, Ordering::SeqCst);
-    }
-
-    /// Report the current stats to stdout.
-    pub fn report(&self) {
-        println!("
-                {: <7} {: <15} {: <12}\n\
-                {: <7} {: <15} {: <12}\n\
-                {: <7} {: <15} {: <12}\
-            ",
-            "STATS",   "Total:",                "Per sec:",
-            "Pixels:", self.pixels_human(),     self.pixels_sec_human(),
-            "Input:",  self.bytes_read_human(), self.bytes_read_sec_human(),
-        );
     }
 }

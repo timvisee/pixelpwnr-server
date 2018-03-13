@@ -2,6 +2,7 @@ extern crate clap;
 extern crate num_cpus;
 
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use clap::{Arg, ArgMatches, App};
 
@@ -46,6 +47,20 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .help("Canvas height (def: screen height)")
                 .display_order(3)
                 .takes_value(true))
+            .arg(Arg::with_name("stats-screen")
+                .long("stats-screen")
+                .value_name("SECONDS")
+                .help("Reporting interval of stats on screen")
+                .default_value("1")
+                .takes_value(true))
+            .arg(Arg::with_name("stats-stdout")
+                .long("stats-stdout")
+                .alias("stats-console")
+                .alias("stats-terminal")
+                .value_name("SECONDS")
+                .help("Reporting interval of stats to stdout")
+                .default_value("5")
+                .takes_value(true))
             .get_matches();
 
         // Instantiate
@@ -85,5 +100,43 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 )
                 .unwrap_or(600),
         )
+    }
+
+    /// The interval of stats reporting on the screen.
+    ///
+    /// If no stats should be reported, `None` is returned.
+    pub fn stats_screen_interval(&self) -> Option<Duration> {
+        self.matches.value_of("stats-screen")
+            .map(|raw| raw.parse::<f64>()
+                .map(|sec: f64| (sec * 1000f64) as u64)
+                .expect("invalid screen stats update interval, must be number of seconds")
+            )
+            .map(|millis| if millis > 0 {
+                Some(Duration::from_millis(millis))
+            } else if millis == 0 {
+                None
+            } else {
+                panic!("invalid screen stats update interval, must be 0 or >1ms");
+            })
+            .unwrap()
+    }
+
+    /// The interval of stats reporting to stdout.
+    ///
+    /// If no stats should be reported, `None` is returned.
+    pub fn stats_stdout_interval(&self) -> Option<Duration> {
+        self.matches.value_of("stats-stdout")
+            .map(|raw| raw.parse::<f64>()
+                .map(|sec: f64| (sec * 1000f64) as u64)
+                .expect("invalid stdout stats update interval, must be number of seconds")
+            )
+            .map(|millis| if millis > 0 {
+                Some(Duration::from_millis(millis))
+            } else if millis == 0 {
+                None
+            } else {
+                panic!("invalid stdout stats update interval, must be 0 or >1ms");
+            })
+            .unwrap()
     }
 }

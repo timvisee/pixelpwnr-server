@@ -20,10 +20,10 @@ mod cmd;
 mod codec;
 mod stats;
 mod stat_monitor;
+mod stat_reporter;
 
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
 
 use futures::prelude::*;
 use futures::future::Executor;
@@ -37,6 +37,7 @@ use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
 use stats::Stats;
+use stat_reporter::StatReporter;
 
 // TODO: use some constant for new lines
 
@@ -88,19 +89,9 @@ fn main() {
         srv.wait().unwrap();
     });
 
-    // Create a thread that reports stats
-    // TODO: improve this reporter thread implementation
-    let stats_reporter = stats.clone();
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(5));
-            stats_reporter.report();
-        }
-    });
-
     // Render the pixelflut screen
     if !arg_handler.no_render() {
-        render(&pixmap, stats);
+        render(&arg_handler, &pixmap, stats);
     } else {
         // Do not render, wait on the server thread instead
         println!("Not rendering canvas, disabled with the --no-render flag");
@@ -108,7 +99,11 @@ fn main() {
     }
 }
 
-fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
+fn worker(
+    rx: mpsc::UnboundedReceiver<TcpStream>,
+    pixmap: Arc<Pixmap>,
+    stats: Arc<Stats>,
+) {
     // Build a CPU pool
     // TODO: share a CPU pool across all workers
     let pool = Builder::new()
@@ -142,27 +137,21 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Ar
 }
 
 /// Start the pixel map renderer.
-fn render(pixmap: &Pixmap, stats: Arc<Stats>) {
+fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
     // Build the renderer
     let mut renderer = Renderer::new(APP_NAME, pixmap);
 
     // Borrow the statistics text
     let stats_text = renderer.stats().text();
 
-    // Update the statistics text each second in a separate thread
-    thread::spawn(move || {
-        loop {
-            // Sleep for a second
-            thread::sleep(Duration::from_secs(1));
-
-            // Update the text
-            *stats_text.lock().unwrap() = format!(
-                "px: {}   input: {}",
-                stats.pixels_sec_human(),
-                stats.bytes_read_sec_human(),
-            );
-        }
-    });
+    // Create a stats reporter, and start reporting
+    let reporter = StatReporter::new(
+        arg_handler.stats_screen_interval(),
+        arg_handler.stats_stdout_interval(),
+        stats, 
+        Some(stats_text),
+    );
+    reporter.start();
 
     // Render the canvas
     renderer.run();
