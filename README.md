@@ -18,6 +18,8 @@ This prototype renderer will be implemented in a quick server if successful.
 
 ## Requirements
 * Rust nightly (v1.24 or higher)
+* Some build essentials (Ubuntu package: `build-essential`)
+* `freetype2` development files (Ubuntu package: `libfreetype6-dev`)
 
 ## Relevant projects
 * [pixelpwnr (client)][pixelpwnr]

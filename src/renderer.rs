@@ -219,6 +219,7 @@ impl<'a> Renderer<'a> {
             // Draw through the pipeline
             encoder.draw(&slice, &pso, &data);
 
+            // Draw the stats
             self.stats.draw(&mut encoder, &main_color).unwrap();
 
             encoder.flush(&mut device);

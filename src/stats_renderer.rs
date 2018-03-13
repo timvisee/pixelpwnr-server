@@ -89,7 +89,7 @@ impl<F: Factory<R>, R: Resources> StatsRenderer<F, R> {
             &self.text.lock().unwrap(),
             [10, 10],
             HorizontalAnchor::Left, VerticalAnchor::Top,
-            [1.0, 0.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
         );
 
         // Draw the text
