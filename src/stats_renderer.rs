@@ -29,6 +29,9 @@ type R = gfx_device_gl::Resources;
 /// White color definition with 4 channels.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
+/// The number of pixels to use for background padding.
+const BG_PADDING: i32 = 12;
+
 /// Screen shader data pipeline
 gfx_defines! {
     pipeline bg_pipe {
@@ -198,10 +201,10 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 let win = self.window_dimentions.unwrap();
 
                 // Determine the position and size of the background quad
-                let w = (bounds.0 / win.0) * 2f32;
-                let h = (bounds.1 / win.1) * 2f32;
-                let x = -1f32 + ((pos.0 as f32) / win.0) * 2f32;
-                let y = 1f32 - ((pos.1 as f32) / win.1) * 2f32 - h;
+                let w = bounds.0 / win.0 * 2f32;
+                let h = bounds.1 / win.1 * 2f32;
+                let x = -1f32 + pos.0 as f32 / win.0 * 2f32;
+                let y = 1f32 - pos.1 as f32 / win.1 * 2f32 - h;
 
                 // Rebuild the vertex buffer and slice data
                 let (
@@ -301,8 +304,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 );
 
                 // Add the offset and additional spacing
-                x += pos.0 as i32;
-                y += pos.1 as i32;
+                x += pos.0 as i32 + BG_PADDING;
+                y += pos.1 as i32 + BG_PADDING;
 
                 // Render the text
                 renderer.add_anchored(
@@ -315,8 +318,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         }
 
         // Find the total width and height, return it
-        (cols_max.iter().sum::<i32>() as f32,
-            rows_max.iter().sum::<i32>() as f32)
+        (cols_max.iter().sum::<i32>() as f32 + BG_PADDING as f32 * 2f32,
+            rows_max.iter().sum::<i32>() as f32 + BG_PADDING as f32 * 2f32)
     }
 
     /// Update the stats rendering view, and the window dimentions.
