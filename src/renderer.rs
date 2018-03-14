@@ -26,7 +26,7 @@ use glutin::WindowEvent::{
 
 use fps_counter::FpsCounter;
 use pixmap::Pixmap;
-use primitive::create_quad;
+use primitive::create_quad_max;
 use stats_renderer::{Corner, StatsRenderer};
 use vertex::Vertex;
 
@@ -114,7 +114,7 @@ impl<'a> Renderer<'a> {
         ) = gfx_glutin::init::<ColorFormat, DepthFormat>(
             builder,
             context,
-            &self.events_loop
+            &self.events_loop,
         );
 
         // Create the command encoder
@@ -130,7 +130,7 @@ impl<'a> Renderer<'a> {
         ).unwrap();
 
         // Create a full screen quad, plane, that is rendered on
-        let plane = create_quad();
+        let plane = create_quad_max();
         let (vertex_buffer, mut slice) = plane.create_vertex_buffer(&mut factory);
 
         // Define the texture kind
@@ -150,8 +150,8 @@ impl<'a> Renderer<'a> {
         };
 
         // Build the stats renderer
-        self.stats.init(factory.clone(), 20).expect("failed to initialize stats text renderer");
-        self.stats.set_text("telnet localhost 1234".into());
+        self.stats.init(factory.clone(), main_color.clone(), 20)
+            .expect("failed to initialize stats text renderer");
 
         // Rendering flags
         let mut running = true;
