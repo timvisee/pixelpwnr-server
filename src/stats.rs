@@ -1,7 +1,7 @@
 extern crate number_prefix;
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use self::number_prefix::{
     binary_prefix,
@@ -20,6 +20,9 @@ use stat_monitor::StatMonitor;
 /// from clients.
 #[derive(Debug)]
 pub struct Stats {
+    /// The number of clients that are currently connected.
+    clients: AtomicU32,
+
     /// The total number of pixels that have been written by clients to the
     /// screen.
     pixels: AtomicU64,
@@ -40,9 +43,15 @@ impl Stats {
         Stats {
             pixels: AtomicU64::new(0),
             pixels_monitor: Mutex::new(StatMonitor::new()),
+            clients: AtomicU32::new(0),
             bytes_read: AtomicU64::new(0),
             bytes_read_monitor: Mutex::new(StatMonitor::new()),
         }
+    }
+
+    /// Get the total number of clients currently connected.
+    pub fn clients(&self) -> u32 {
+        self.clients.load(Ordering::Relaxed)
     }
 
     /// Get the total number of pixels that have been written to the screen
@@ -87,6 +96,16 @@ impl Stats {
                 },
             None => String::from("~"),
         }
+    }
+
+    /// Increment the number of clients that are connected, by one.
+    pub fn inc_clients(&self) {
+        self.clients.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// Decrease the number of clients that are connected, by one.
+    pub fn dec_clients(&self) {
+        self.clients.fetch_sub(1, Ordering::SeqCst);
     }
 
     /// Increase the number of pixels that have been written to the screen by

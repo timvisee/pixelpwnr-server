@@ -114,16 +114,30 @@ fn worker(
     let done = rx.for_each(move |socket| {
         // A client connected, ensure we're able to get it's address
         let addr = socket.peer_addr().expect("failed to get remote address");
-        println!("A client connected from {}", addr);
+        println!("A client connected (from: {})", addr);
+
+        // Increase the number of clients
+        stats.inc_clients();
 
         // Wrap the socket with the Lines codec,
         // to interact with lines instead of raw bytes
         let lines = Lines::new(socket, stats.clone());
 
         // Define a client as connection
+        let disconnect_stats = stats.clone();
         let connection = Client::new(lines, pixmap.clone(), stats.clone())
             .map_err(|e| {
-                println!("connection error = {:?}", e);
+                // Handle connection errors, show an error message
+                println!("Client connection error: {:?}", e);
+            })
+            .then(move |_| -> Result<_, _> {
+                // Print a disconnect message
+                println!("A client disconnected (from: {})", addr);
+
+                // Decreasde the client connections number
+                disconnect_stats.dec_clients();
+
+                return Ok(());
             });
 
         // Add the connection future to the pool on this thread
