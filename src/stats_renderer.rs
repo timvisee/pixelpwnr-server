@@ -29,9 +29,6 @@ type R = gfx_device_gl::Resources;
 /// White color definition with 4 channels.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-/// The number of pixels to use for background padding.
-const BG_PADDING: i32 = 12;
-
 /// Screen shader data pipeline
 gfx_defines! {
     pipeline bg_pipe {
@@ -60,6 +57,15 @@ gfx_defines! {
 pub struct StatsRenderer<F: Factory<R> + Clone> {
     /// The corner to render the stats in.
     corner: Corner,
+
+    /// The rendering offset.
+    offset: (u32, u32),
+
+    /// The rendering padding.
+    padding: i32,
+
+    /// The column spacing amount.
+    col_spacing: i32,
 
     /// The text to render.
     text: Arc<Mutex<String>>,
@@ -91,6 +97,9 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     pub fn new(corner: Corner) -> Self {
         StatsRenderer {
             corner,
+            offset: (0, 0),
+            padding: 0,
+            col_spacing: 0,
             text: Arc::new(Mutex::new(String::new())),
             renderer: None,
             factory: None,
@@ -110,9 +119,15 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         main_color: RenderTargetView<R, ColorFormat>,
         main_depth: DepthStencilView<R, DepthFormat>,
         font_size: u8,
+        offset: (u32, u32),
+        padding: i32,
+        col_spacing: i32,
     ) -> Result<(), GfxTextError> {
-        // Set the window dimentions
+        // Set the window dimentions, offset and padding
         self.window_dimentions = Some(window_dimentions);
+        self.offset = offset;
+        self.padding = padding;
+        self.col_spacing = col_spacing;
 
         // Build the text renderer
         self.renderer = Some(
@@ -187,9 +202,10 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         let renderer = self.renderer.as_mut().unwrap();
 
         // Draw formatted text on the text scene
-        let pos = (10, 10);
         let bounds = Self::scene_draw_format(
-            pos,
+            self.offset,
+            self.padding,
+            self.col_spacing,
             renderer,
             &self.text.lock().unwrap(),
         );
@@ -203,8 +219,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 // Determine the position and size of the background quad
                 let w = bounds.0 / win.0 * 2f32;
                 let h = bounds.1 / win.1 * 2f32;
-                let x = -1f32 + pos.0 as f32 / win.0 * 2f32;
-                let y = 1f32 - pos.1 as f32 / win.1 * 2f32 - h;
+                let x = -1f32 + self.offset.0 as f32 / win.0 * 2f32;
+                let y = 1f32 - self.offset.1 as f32 / win.1 * 2f32 - h;
 
                 // Rebuild the vertex buffer and slice data
                 let (
@@ -235,11 +251,15 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     /// The drawing bounds are returned.
     fn scene_draw_format(
         pos: (u32, u32),
+        padding: i32,
+        col_spacing: i32,
         renderer: &mut TextRenderer<R, F>,
         text: &str,
     ) -> (f32, f32) {
         Self::scene_draw_table(
             pos,
+            padding,
+            col_spacing,
             renderer,
             text.split("\n")
                 .map(|row| row.split("\t").collect())
@@ -254,6 +274,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     /// The drawing bounds are returned.
     fn scene_draw_table(
         pos: (u32, u32),
+        padding: i32,
+        col_spacing: i32,
         renderer: &mut TextRenderer<R, F>,
         text: Vec<Vec<&str>>,
     ) -> (f32, f32) {
@@ -292,7 +314,11 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
 
                 out
             });
-        cols_max.iter_mut().rev().skip(1).map(|width| *width += 20).count();
+        cols_max.iter_mut()
+            .rev()
+            .skip(1)
+            .map(|width| *width += col_spacing)
+            .count();
 
         // Render each text
         for (row, text) in text.iter().enumerate() {
@@ -304,8 +330,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 );
 
                 // Add the offset and additional spacing
-                x += pos.0 as i32 + BG_PADDING;
-                y += pos.1 as i32 + BG_PADDING;
+                x += pos.0 as i32 + padding;
+                y += pos.1 as i32 + padding;
 
                 // Render the text
                 renderer.add_anchored(
@@ -318,8 +344,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         }
 
         // Find the total width and height, return it
-        (cols_max.iter().sum::<i32>() as f32 + BG_PADDING as f32 * 2f32,
-            rows_max.iter().sum::<i32>() as f32 + BG_PADDING as f32 * 2f32)
+        (cols_max.iter().sum::<i32>() as f32 + padding as f32 * 2f32,
+            rows_max.iter().sum::<i32>() as f32 + padding as f32 * 2f32)
     }
 
     /// Update the stats rendering view, and the window dimentions.
