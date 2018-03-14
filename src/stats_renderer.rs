@@ -64,6 +64,12 @@ pub struct StatsRenderer<F: Factory<R> + Clone> {
     /// The text renderer.
     renderer: Option<TextRenderer<R, F>>,
 
+    /// A factory to build new model instances if required.
+    factory: Option<F>,
+
+    /// The dimentions the rendering window has, used for text placement.
+    window_dimentions: Option<(f32, f32)>,
+
     /// The depth stencil for background rendering.
     bg_depth: Option<DepthStencilView<R, DepthFormat>>,
 
@@ -84,6 +90,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
             corner,
             text: Arc::new(Mutex::new(String::new())),
             renderer: None,
+            factory: None,
+            window_dimentions: None,
             bg_depth: None,
             bg_pso: None,
             bg_slice: None,
@@ -95,17 +103,18 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     pub fn init(
         &mut self,
         mut factory: F,
+        window_dimentions: (f32, f32),
         main_color: RenderTargetView<R, ColorFormat>,
         main_depth: DepthStencilView<R, DepthFormat>,
-        size: u8,
+        font_size: u8,
     ) -> Result<(), GfxTextError> {
-        // Set the depth stencil
-        self.bg_depth = Some(main_depth);
+        // Set the window dimentions
+        self.window_dimentions = Some(window_dimentions);
 
         // Build the text renderer
         self.renderer = Some(
             gfx_text::new(factory.clone())
-                .with_size(size)
+                .with_size(font_size)
                 .build()?
         );
 
@@ -130,6 +139,10 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 out: main_color,
             }
         );
+
+        // Set the factory and depth stencil
+        self.factory = Some(factory);
+        self.bg_depth = Some(main_depth);
 
         Ok(())
     }
@@ -167,54 +180,80 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
             return Ok(());
         }
 
-        // Draw the background quad
-        if self.bg_slice.is_some() && self.bg_pso.is_some() && self.bg_data.is_some() {
-            encoder.draw(
-                self.bg_slice.as_ref().unwrap(),
-                self.bg_pso.as_ref().unwrap(),
-                self.bg_data.as_ref().unwrap(),
-            );
-        }
-
         // Unwrap the renderer
         let renderer = self.renderer.as_mut().unwrap();
 
-        // Draw formatted text
-        Self::draw_format(
-            (10, 10),
+        // Draw formatted text on the text scene
+        let pos = (10, 10);
+        let bounds = Self::scene_draw_format(
+            pos,
             renderer,
             &self.text.lock().unwrap(),
         );
 
-        // Draw the text
+        // Draw the background quad, if there are some bounds
+        if bounds != (0f32, 0f32) {
+            if self.bg_slice.is_some() && self.bg_pso.is_some() && self.bg_data.is_some() {
+                // Get the window dimentions
+                let win = self.window_dimentions.unwrap();
+
+                // Determine the position and size of the background quad
+                let w = (bounds.0 / win.0) * 2f32;
+                let h = (bounds.1 / win.1) * 2f32;
+                let x = -1f32 + ((pos.0 as f32) / win.0) * 2f32;
+                let y = 1f32 - ((pos.1 as f32) / win.1) * 2f32 - h;
+
+                // Rebuild the vertex buffer and slice data
+                let (
+                    vertex_buffer,
+                    slice,
+                ) = create_quad((x, y), (w, h))
+                    .create_vertex_buffer(self.factory.as_mut().unwrap());
+
+                *self.bg_slice.as_mut().unwrap() = slice;
+                self.bg_data.as_mut().unwrap().vbuf = vertex_buffer;
+
+                encoder.draw(
+                    self.bg_slice.as_ref().unwrap(),
+                    self.bg_pso.as_ref().unwrap(),
+                    self.bg_data.as_ref().unwrap(),
+                );
+            }
+        }
+
+        // Draw the text scene
         renderer.draw(encoder, target)
     }
 
     /// Draw text in a formatted way.
     /// This method allows a string to be rendered as table.
     /// Rows are separated by `\n`, while columns are separated by `\t`.
-    fn draw_format(
+    ///
+    /// The drawing bounds are returned.
+    fn scene_draw_format(
         pos: (u32, u32),
         renderer: &mut TextRenderer<R, F>,
         text: &str,
-    ) {
-        Self::draw_table(
+    ) -> (f32, f32) {
+        Self::scene_draw_table(
             pos,
             renderer,
             text.split("\n")
                 .map(|row| row.split("\t").collect())
                 .collect(),
-        );
+        )
     }
 
     /// Draw a table of text with the given `renderer`.
     /// The text table to draw should be defined in the `text` vectors:
     /// `Rows(Columns)`
-    fn draw_table(
+    ///
+    /// The drawing bounds are returned.
+    fn scene_draw_table(
         pos: (u32, u32),
         renderer: &mut TextRenderer<R, F>,
         text: Vec<Vec<&str>>,
-    ) {
+    ) -> (f32, f32) {
         // Build a table of text bounds
         let bounds: Vec<Vec<(i32, i32)>> = text.iter()
             .map(|col| col.iter()
@@ -231,24 +270,26 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
             ).collect();
 
         // Find the maximum width for each column
-        let cols_max: Vec<i32> = bounds.iter()
+        let mut cols_max: Vec<i32> = bounds.iter()
             .map(|row| row.iter().map(|size| size.0).collect())
             .fold(Vec::new(), |acc: Vec<i32>, row: Vec<i32>| {
                 // Iterate over widths in acc and row,
                 // select the largest one
-                let mut acc: Vec<i32> = acc.iter()
+                let mut out: Vec<i32> = acc.iter()
                     .zip(row.iter())
                     .map(|(a, b)| max(*a, *b))
                     .collect();
 
-                // If there were additional widths in row, just add them
-                let acc_len = acc.len();
-                if acc_len < row.len() {
-                    acc.extend(row.iter().skip(acc_len));
+                // Extend the output if there are any widths left
+                let out_len = out.len();
+                if out_len < acc.len() || out_len < row.len() {
+                    out.extend(acc.iter().skip(out_len));
+                    out.extend(row.iter().skip(out_len));
                 }
 
-                acc
+                out
             });
+        cols_max.iter_mut().rev().skip(1).map(|width| *width += 20).count();
 
         // Render each text
         for (row, text) in text.iter().enumerate() {
@@ -260,7 +301,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 );
 
                 // Add the offset and additional spacing
-                x += pos.0 as i32 + 20i32 * col as i32;
+                x += pos.0 as i32;
                 y += pos.1 as i32;
 
                 // Render the text
@@ -272,12 +313,21 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 );
             }
         }
+
+        // Find the total width and height, return it
+        (cols_max.iter().sum::<i32>() as f32,
+            rows_max.iter().sum::<i32>() as f32)
     }
 
-    /// Update the stats rendering view.
+    /// Update the stats rendering view, and the window dimentions.
     /// This should be called when the GL rendering window is resized.
     // TODO: also update the text view here
-    pub fn update_views(&mut self, window: &GlWindow) {
+    pub fn update_views(
+        &mut self,
+        window: &GlWindow,
+        dimentions: (f32, f32),
+    ) {
+        // Update the views
         if let Some(data) = self.bg_data.as_mut() {
             gfx_glutin::update_views(
                 window,
@@ -285,6 +335,9 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 self.bg_depth.as_mut().unwrap(),
             )
         }
+
+        // Update the window dimentions
+        self.window_dimentions = Some(dimentions);
     }
 }
 

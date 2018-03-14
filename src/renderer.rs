@@ -150,19 +150,20 @@ impl<'a> Renderer<'a> {
             out: main_color.clone(),
         };
 
-        // Build the stats renderer
-        self.stats.init(
-            factory.clone(),
-            main_color.clone(),
-            main_depth.clone(),
-            20,
-        ).expect("failed to initialize stats text renderer");
-
         // Rendering flags
         let mut running = true;
         let mut update = false;
         let mut update_views = false;
         let mut dimentions = (size.0 as f32, size.1 as f32);
+
+        // Build the stats renderer
+        self.stats.init(
+            factory.clone(),
+            dimentions,
+            main_color.clone(),
+            main_depth.clone(),
+            20,
+        ).expect("failed to initialize stats text renderer");
 
         // Keep rendering until we're done
         while running {
@@ -219,10 +220,15 @@ impl<'a> Renderer<'a> {
 
             // Update the views if required
             if update_views {
-                // Update the stats view
+                // Update the main color and depth
                 gfx_glutin::update_views(&window, &mut main_color, &mut main_depth);
+
+                // Update the pixel texture
                 gfx_glutin::update_views(&window, &mut data.out, &mut data_depth);
-                self.stats.update_views(&window);
+
+                // Update the stats text
+                self.stats.update_views(&window, dimentions);
+
                 update_views = false;
             }
 
