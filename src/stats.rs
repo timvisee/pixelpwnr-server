@@ -65,7 +65,13 @@ impl Stats {
     pub fn pixels_human(&self) -> String {
         match decimal_prefix(self.pixels() as f64) {
             Standalone(b) => format!("{:.00} P", b.ceil()),
-            Prefixed(p, n) => format!("{:.02} {}P", n, p),
+            Prefixed(p, n) => if n < 10f64 {
+                    format!("{:.02} {}P", n, p)
+                } else if n < 100f64 {
+                    format!("{:.01} {}P", n, p)
+                } else {
+                    format!("{:.00} {}P", n, p)
+                },
         }
     }
 
@@ -92,7 +98,13 @@ impl Stats {
             Some(px) =>
                 match decimal_prefix(px) {
                     Standalone(b) => format!("{:.00} P/s", b.ceil()),
-                    Prefixed(p, n) => format!("{:.02} {}P/s", n, p),
+                    Prefixed(p, n) => if n < 10f64 {
+                            format!("{:.02} {}P/s", n, p)
+                        } else if n < 100f64 {
+                            format!("{:.01} {}P/s", n, p)
+                        } else {
+                            format!("{:.00} {}P/s", n, p)
+                        },
                 },
             None => String::from("~"),
         }
@@ -129,7 +141,13 @@ impl Stats {
     pub fn bytes_read_human(&self) -> String {
         match binary_prefix(self.bytes_read() as f64) {
             Standalone(b) => format!("{:.00} B", b.ceil()),
-            Prefixed(p, n) => format!("{:.02} {}B", n, p),
+            Prefixed(p, n) => if n < 10f64 {
+                    format!("{:.02} {}B", n, p)
+                } else if n < 100f64 {
+                    format!("{:.01} {}B", n, p)
+                } else {
+                    format!("{:.00} {}B", n, p)
+                },
         }
     }
 
@@ -156,7 +174,13 @@ impl Stats {
             Some(bytes) =>
                 match decimal_prefix(bytes * 8f64) {
                     Standalone(b) => format!("{:.00} b/s", b.ceil()),
-                    Prefixed(p, n) => format!("{:.02} {}b/s", n, p),
+                    Prefixed(p, n) => if n < 10f64 {
+                            format!("{:.02} {}b/s", n, p)
+                        } else if n < 100f64 {
+                            format!("{:.01} {}b/s", n, p)
+                        } else {
+                            format!("{:.00} {}b/s", n, p)
+                        },
                 },
             None => String::from("~"),
         }

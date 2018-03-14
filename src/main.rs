@@ -137,7 +137,7 @@ fn worker(
                 // Decreasde the client connections number
                 disconnect_stats.dec_clients();
 
-                return Ok(());
+                Ok(())
             });
 
         // Add the connection future to the pool on this thread
