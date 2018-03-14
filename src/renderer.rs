@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use gfx;
 use gfx::{Device, Factory};
 use gfx::handle::ShaderResourceView;
@@ -152,7 +150,7 @@ impl<'a> Renderer<'a> {
         };
 
         // Build the stats renderer
-        self.stats.init(factory.clone(), 20);
+        self.stats.init(factory.clone(), 20).expect("failed to initialize stats text renderer");
         self.stats.set_text("telnet localhost 1234".into());
 
         // Rendering flags

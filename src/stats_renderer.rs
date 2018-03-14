@@ -1,5 +1,7 @@
 extern crate gfx_text;
 
+use std::cmp::max;
+use std::iter::Extend;
 use std::sync::{Arc, Mutex};
 
 use gfx::{CommandBuffer, Encoder, Factory, Resources};
@@ -79,21 +81,101 @@ impl<F: Factory<R>, R: Resources> StatsRenderer<F, R> {
         }
 
         // Unwrap the renderer
-        let mut renderer = self.renderer.as_mut().unwrap();
+        let renderer = self.renderer.as_mut().unwrap();
 
-        // TODO: draw a background box
-
-        // Build up the text renderer
-        // TODO: don't unwrap
-        renderer.add_anchored(
+        // Draw formatted text
+        Self::draw_format(
+            (10, 10),
+            renderer,
             &self.text.lock().unwrap(),
-            [10, 10],
-            HorizontalAnchor::Left, VerticalAnchor::Top,
-            [1.0, 1.0, 1.0, 1.0],
         );
 
         // Draw the text
         renderer.draw(encoder, target)
+    }
+
+    /// Draw text in a formatted way.
+    /// This method allows a string to be rendered as table.
+    /// Rows are separated by `\n`, while columns are separated by `\t`.
+    fn draw_format(
+        pos: (u32, u32),
+        renderer: &mut Renderer<R, F>,
+        text: &str,
+    ) {
+        Self::draw_table(
+            pos,
+            renderer,
+            text.split("\n")
+                .map(|row| row.split("\t").collect())
+                .collect(),
+        );
+    }
+
+    /// Draw a table of text with the given `renderer`.
+    /// The text table to draw should be defined in the `text` vectors:
+    /// `Rows(Columns)`
+    fn draw_table(
+        pos: (u32, u32),
+        renderer: &mut Renderer<R, F>,
+        text: Vec<Vec<&str>>,
+    ) {
+        // Build a table of text bounds
+        let bounds: Vec<Vec<(i32, i32)>> = text.iter()
+            .map(|col| col.iter()
+                .map(|text| renderer.measure(text))
+                .collect()
+            ).collect();
+
+        // Find the maximum height for each row
+        let rows_max: Vec<i32> = bounds.iter()
+            .map(|col| col.iter()
+                 .map(|size| size.1)
+                 .max()
+                 .unwrap_or(0)
+            ).collect();
+
+        // Find the maximum width for each column
+        let cols_max: Vec<i32> = bounds.iter()
+            .map(|row| row.iter().map(|size| size.0).collect())
+            .fold(Vec::new(), |acc: Vec<i32>, row: Vec<i32>| {
+                // Iterate over widths in acc and row,
+                // select the largest one
+                let mut acc: Vec<i32> = acc.iter()
+                    .zip(row.iter())
+                    .map(|(a, b)| max(*a, *b))
+                    .collect();
+
+                // If there were additional widths in row, just add them
+                let acc_len = acc.len();
+                if acc_len < row.len() {
+                    acc.extend(row.iter().skip(acc_len));
+                }
+
+                acc
+            });
+
+        // Render each text
+        for (row, text) in text.iter().enumerate() {
+            for (col, text) in text.iter().enumerate() {
+                // Find the coordinate to use
+                let (mut x, mut y): (i32, i32) = (
+                    cols_max.iter().take(col).sum::<i32>(),
+                    rows_max.iter().take(row).sum::<i32>(),
+                );
+
+                // Add the offset and additional spacing
+                x += pos.0 as i32 + 20i32 * col as i32;
+                y += pos.1 as i32;
+
+                // Render the text
+                renderer.add_anchored(
+                    text,
+                    [x, y],
+                    HorizontalAnchor::Left, VerticalAnchor::Top,
+                    [1.0, 1.0, 1.0, 1.0],
+                );
+            }
+        }
     }
 }
 
