@@ -4,9 +4,11 @@ use std::cmp::max;
 use std::iter::Extend;
 use std::sync::{Arc, Mutex};
 
-use gfx::{CommandBuffer, Encoder, Factory, Resources};
+use gfx;
+use gfx::{CommandBuffer, Encoder, Factory, PipelineState, Resources, Slice};
 use gfx::format::RenderFormat;
 use gfx::handle::RenderTargetView;
+use gfx::traits::FactoryExt;
 use self::gfx_text::{
     Error as GfxTextError,
     HorizontalAnchor,
@@ -14,7 +16,40 @@ use self::gfx_text::{
     VerticalAnchor,
 };
 
-pub struct StatsRenderer<F: Factory<R>, R: Resources> {
+use primitive::create_quad;
+use vertex::Vertex;
+
+type ColorFormat = gfx::format::Rgba8;
+
+/// White color definition with 4 channels.
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
+/// Screen shader data pipeline
+gfx_defines! {
+    pipeline bg_pipe {
+        vbuf: gfx::VertexBuffer<Vertex> = (),
+        out: gfx::BlendTarget<ColorFormat> = (
+            "Target0",
+			gfx::state::ColorMask::all(),
+			gfx::state::Blend {
+                color: gfx::state::BlendChannel {
+                    equation: gfx::state::Equation::Add,
+                    source: gfx::state::Factor::SourceAlphaSaturated,
+                    destination: gfx::state::Factor::OneMinus(
+                        gfx::state::BlendValue::SourceAlpha
+                    ),
+                },
+                alpha: gfx::state::BlendChannel {
+                    equation: gfx::state::Equation::Add,
+                    source: gfx::state::Factor::One,
+                    destination: gfx::state::Factor::Zero,
+                },
+		    }
+        ),
+    }
+}
+
+pub struct StatsRenderer<F: Factory<R> + Clone, R: Resources> {
     /// The corner to render the stats in.
     corner: Corner,
 
@@ -23,25 +58,60 @@ pub struct StatsRenderer<F: Factory<R>, R: Resources> {
 
     /// The text renderer.
     renderer: Option<Renderer<R, F>>,
+
+    bg_pso: Option<PipelineState<R, bg_pipe::Meta>>,
+    bg_slice: Option<Slice<R>>,
+    bg_data: Option<bg_pipe::Data<R>>,
 }
 
-impl<F: Factory<R>, R: Resources> StatsRenderer<F, R> {
+impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
     /// Construct a new stats renderer.
     pub fn new(corner: Corner) -> Self {
         StatsRenderer {
             corner,
             text: Arc::new(Mutex::new(String::new())),
             renderer: None,
+            bg_pso: None,
+            bg_slice: None,
+            bg_data: None,
         }
     }
 
     /// Initialize the renderer.
-    pub fn init(&mut self, factory: F, size: u8) -> Result<(), GfxTextError> {
+    pub fn init(
+        &mut self,
+        mut factory: F,
+        main_color: RenderTargetView<R, ColorFormat>,
+        size: u8,
+    ) -> Result<(), GfxTextError> {
         // Build the text renderer
         self.renderer = Some(
-            gfx_text::new(factory)
+            gfx_text::new(factory.clone())
                 .with_size(size)
                 .build()?
+        );
+
+        // Create a shader pipeline for the stats background
+        self.bg_pso = Some(
+            factory.create_pipeline_simple(
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/stats_bg.glslv")),
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/stats_bg.glslf")),
+                bg_pipe::new(),
+            ).unwrap()
+        );
+
+        // Create a background plane
+        let bg_plane = create_quad((-1f32, 0f32), (0.2f32, 0.95f32));
+        let (vertex_buffer, mut slice) = bg_plane.create_vertex_buffer(&mut factory);
+
+        self.bg_slice = Some(slice);
+
+        // Build the pipe data
+        self.bg_data = Some(
+            bg_pipe::Data {
+                vbuf: vertex_buffer,
+                out: main_color,
+            }
         );
 
         Ok(())
@@ -78,6 +148,15 @@ impl<F: Factory<R>, R: Resources> StatsRenderer<F, R> {
         // or if there is no text to draw
         if self.renderer.is_none() || self.has_text() {
             return Ok(());
+        }
+
+        // Draw the background quad
+        if self.bg_slice.is_some() && self.bg_pso.is_some() && self.bg_data.is_some() {
+            encoder.draw(
+                self.bg_slice.as_ref().unwrap(),
+                self.bg_pso.as_ref().unwrap(),
+                self.bg_data.as_ref().unwrap(),
+            );
         }
 
         // Unwrap the renderer
@@ -172,7 +251,7 @@ impl<F: Factory<R>, R: Resources> StatsRenderer<F, R> {
                     text,
                     [x, y],
                     HorizontalAnchor::Left, VerticalAnchor::Top,
-                    [1.0, 1.0, 1.0, 1.0],
+                    WHITE,
                 );
             }
         }
