@@ -57,7 +57,7 @@ pub struct Renderer<'a> {
     pixmap: &'a Pixmap,
 
     // Used to render statistics on the canvas.
-    stats: StatsRenderer<F, R>,
+    stats: StatsRenderer<F>,
 
     // Glutin events loop.
     events_loop: EventsLoop,
@@ -109,7 +109,7 @@ impl<'a> Renderer<'a> {
             window,
             mut device,
             mut factory,
-            main_color,
+            mut main_color,
             mut main_depth,
         ) = gfx_glutin::init::<ColorFormat, DepthFormat>(
             builder,
@@ -131,7 +131,7 @@ impl<'a> Renderer<'a> {
 
         // Create a full screen quad, plane, that is rendered on
         let plane = create_quad_max();
-        let (vertex_buffer, mut slice) = plane.create_vertex_buffer(&mut factory);
+        let (vertex_buffer, slice) = plane.create_vertex_buffer(&mut factory);
 
         // Define the texture kind
         let texture_kind = Kind::D2(size.0 as u16, size.1 as u16, AaMode::Single);
@@ -143,6 +143,7 @@ impl<'a> Renderer<'a> {
         );
 
         // Build pipe data
+        let mut data_depth = main_depth.clone();
         let mut data = pipe::Data {
             vbuf: vertex_buffer,
             image: base_image,
@@ -150,12 +151,17 @@ impl<'a> Renderer<'a> {
         };
 
         // Build the stats renderer
-        self.stats.init(factory.clone(), main_color.clone(), 20)
-            .expect("failed to initialize stats text renderer");
+        self.stats.init(
+            factory.clone(),
+            main_color.clone(),
+            main_depth.clone(),
+            20,
+        ).expect("failed to initialize stats text renderer");
 
         // Rendering flags
         let mut running = true;
         let mut update = false;
+        let mut update_views = false;
         let mut dimentions = (size.0 as f32, size.1 as f32);
 
         // Keep rendering until we're done
@@ -167,24 +173,24 @@ impl<'a> Renderer<'a> {
             );
 
             // Update graphics when required
-            if update {
-                // TODO: can we remove this?
-                let (vertex_buffer, slice_new) = plane.create_vertex_buffer(&mut factory);
+            // if update {
+            //     // TODO: can we remove this?
+            //     let (vertex_buffer, slice_new) = plane.create_vertex_buffer(&mut factory);
 
-                // Redefine the vertex buffer and slice
-                data.vbuf = vertex_buffer;
-                slice = slice_new;
+            //     // Redefine the vertex buffer and slice
+            //     data.vbuf = vertex_buffer;
+            //     slice = slice_new;
 
-                // We've successfully updated
-                update = false
-            }
+            //     // We've successfully updated
+            //     update = false
+            // }
 
-            // Poll vor events
+            // Poll for events
             self.events_loop.poll_events(|event| {
                 match event {
                     WindowEvent {
                         window_id: _,
-                        event
+                        event,
                     } => match event {
                         // Stop running when escape is pressed
                         WindowKeyboardInput  {
@@ -193,15 +199,15 @@ impl<'a> Renderer<'a> {
                                 scancode: _,
                                 state: _,
                                 virtual_keycode: Some(VirtualKeyCode::Escape),
-                                modifiers: _
+                                modifiers: _,
                             }
                         } | Closed => running = false,
 
                         // Update the view when the window is resized
                         Resized(w, h) => {
-                            gfx_glutin::update_views(&window, &mut data.out, &mut main_depth);
                             dimentions = (w as f32, h as f32);
-                            update = true
+                            update = true;
+                            update_views = true;
                         },
 
                         _ => {},
@@ -210,6 +216,15 @@ impl<'a> Renderer<'a> {
                     _ => {},
                 }
             });
+
+            // Update the views if required
+            if update_views {
+                // Update the stats view
+                gfx_glutin::update_views(&window, &mut main_color, &mut main_depth);
+                gfx_glutin::update_views(&window, &mut data.out, &mut data_depth);
+                self.stats.update_views(&window);
+                update_views = false;
+            }
 
             // Clear the buffer
             encoder.clear(&data.out, BLACK);
@@ -232,7 +247,7 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    pub fn stats(&self) -> &StatsRenderer<F, R> {
+    pub fn stats(&self) -> &StatsRenderer<F> {
         &self.stats
     }
 

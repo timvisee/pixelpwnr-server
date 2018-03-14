@@ -5,14 +5,17 @@ use std::iter::Extend;
 use std::sync::{Arc, Mutex};
 
 use gfx;
-use gfx::{CommandBuffer, Encoder, Factory, PipelineState, Resources, Slice};
+use gfx::{CommandBuffer, Encoder, Factory, PipelineState, Slice};
 use gfx::format::RenderFormat;
-use gfx::handle::RenderTargetView;
+use gfx::handle::{DepthStencilView, RenderTargetView};
 use gfx::traits::FactoryExt;
+use gfx_device_gl;
+use gfx_window_glutin as gfx_glutin;
+use glutin::GlWindow;
 use self::gfx_text::{
     Error as GfxTextError,
     HorizontalAnchor,
-    Renderer,
+    Renderer as TextRenderer,
     VerticalAnchor,
 };
 
@@ -20,6 +23,8 @@ use primitive::create_quad;
 use vertex::Vertex;
 
 type ColorFormat = gfx::format::Rgba8;
+type DepthFormat = gfx::format::DepthStencil;
+type R = gfx_device_gl::Resources;
 
 /// White color definition with 4 channels.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
@@ -49,7 +54,7 @@ gfx_defines! {
     }
 }
 
-pub struct StatsRenderer<F: Factory<R> + Clone, R: Resources> {
+pub struct StatsRenderer<F: Factory<R> + Clone> {
     /// The corner to render the stats in.
     corner: Corner,
 
@@ -57,20 +62,29 @@ pub struct StatsRenderer<F: Factory<R> + Clone, R: Resources> {
     text: Arc<Mutex<String>>,
 
     /// The text renderer.
-    renderer: Option<Renderer<R, F>>,
+    renderer: Option<TextRenderer<R, F>>,
 
+    /// The depth stencil for background rendering.
+    bg_depth: Option<DepthStencilView<R, DepthFormat>>,
+
+    /// The PSO for background rendering.
     bg_pso: Option<PipelineState<R, bg_pipe::Meta>>,
+
+    /// The vertex slice for the background quad.
     bg_slice: Option<Slice<R>>,
+
+    /// The background rendering data.
     bg_data: Option<bg_pipe::Data<R>>,
 }
 
-impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
+impl<F: Factory<R> + Clone> StatsRenderer<F> {
     /// Construct a new stats renderer.
     pub fn new(corner: Corner) -> Self {
         StatsRenderer {
             corner,
             text: Arc::new(Mutex::new(String::new())),
             renderer: None,
+            bg_depth: None,
             bg_pso: None,
             bg_slice: None,
             bg_data: None,
@@ -82,8 +96,12 @@ impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
         &mut self,
         mut factory: F,
         main_color: RenderTargetView<R, ColorFormat>,
+        main_depth: DepthStencilView<R, DepthFormat>,
         size: u8,
     ) -> Result<(), GfxTextError> {
+        // Set the depth stencil
+        self.bg_depth = Some(main_depth);
+
         // Build the text renderer
         self.renderer = Some(
             gfx_text::new(factory.clone())
@@ -102,11 +120,10 @@ impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
 
         // Create a background plane
         let bg_plane = create_quad((-1f32, 0f32), (0.2f32, 0.95f32));
-        let (vertex_buffer, mut slice) = bg_plane.create_vertex_buffer(&mut factory);
+        let (vertex_buffer, slice) = bg_plane.create_vertex_buffer(&mut factory);
 
+        // Store the slice, and build the background pipe data
         self.bg_slice = Some(slice);
-
-        // Build the pipe data
         self.bg_data = Some(
             bg_pipe::Data {
                 vbuf: vertex_buffer,
@@ -178,7 +195,7 @@ impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
     /// Rows are separated by `\n`, while columns are separated by `\t`.
     fn draw_format(
         pos: (u32, u32),
-        renderer: &mut Renderer<R, F>,
+        renderer: &mut TextRenderer<R, F>,
         text: &str,
     ) {
         Self::draw_table(
@@ -195,7 +212,7 @@ impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
     /// `Rows(Columns)`
     fn draw_table(
         pos: (u32, u32),
-        renderer: &mut Renderer<R, F>,
+        renderer: &mut TextRenderer<R, F>,
         text: Vec<Vec<&str>>,
     ) {
         // Build a table of text bounds
@@ -254,6 +271,19 @@ impl<F: Factory<R> + Clone, R: Resources> StatsRenderer<F, R> {
                     WHITE,
                 );
             }
+        }
+    }
+
+    /// Update the stats rendering view.
+    /// This should be called when the GL rendering window is resized.
+    // TODO: also update the text view here
+    pub fn update_views(&mut self, window: &GlWindow) {
+        if let Some(data) = self.bg_data.as_mut() {
+            gfx_glutin::update_views(
+                window,
+                &mut data.out,
+                self.bg_depth.as_mut().unwrap(),
+            )
         }
     }
 }
