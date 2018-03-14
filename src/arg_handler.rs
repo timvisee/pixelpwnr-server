@@ -61,10 +61,31 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .help("Reporting interval of stats to stdout")
                 .default_value("5")
                 .takes_value(true))
-            .arg(Arg::with_name("font-size")
-                .long("font-size")
+            .arg(Arg::with_name("stats-font-size")
+                .long("stats-font-size")
+                .alias("font-size")
                 .value_name("PX")
-                .help("Screen status font size in pixels")
+                .help("Screen stats font size in pixels")
+                .default_value("20")
+                .takes_value(true))
+            .arg(Arg::with_name("stats-padding")
+                .long("stats-padding")
+                .alias("font-size")
+                .value_name("PX")
+                .help("Screen stats padding")
+                .default_value("12")
+                .takes_value(true))
+            .arg(Arg::with_name("stats-offset")
+                .long("stats-offset")
+                .value_name("XxY")
+                .help("Screen stats offset")
+                .default_value("10x10")
+                .takes_value(true))
+            .arg(Arg::with_name("stats-col-spacing")
+                .long("stats-col-spacing")
+                .alias("stats-column-spacing")
+                .value_name("PX")
+                .help("Screen stats column spacing")
                 .default_value("20")
                 .takes_value(true))
             .get_matches();
@@ -147,10 +168,46 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
     }
 
     /// Get the font size to use for the status text on the screen.
-    pub fn font_size(&self) -> u8 {
-        self.matches.value_of("font-size")
+    pub fn stats_font_size(&self) -> u8 {
+        self.matches.value_of("stats-font-size")
             .map(|raw| raw.parse::<u8>()
                 .expect("invalid font size")
+            ).unwrap()
+    }
+
+    /// Get the number of pixels to offset the status with.
+    pub fn stats_offset(&self) -> (u32, u32) {
+        self.matches.value_of("stats-offset")
+            .map(|raw| raw.to_lowercase()
+                .split("x")
+                .map(|val| val.to_owned())
+                .collect()
+            )
+            .map(|sizes: Vec<String>| if sizes.len() != 2 {
+                panic!("invalid stats offset");
+            } else {
+                (sizes[0].clone(), sizes[1].clone())
+            })
+            .map(|(x, y)| (
+                x.parse().expect("invalid x offset for stats"),
+                y.parse().expect("invalid x offset for stats"),
+            ))
+            .unwrap()
+    }
+
+    /// Get the number of pixels to use for padding for the stats on the screen.
+    pub fn stats_padding(&self) -> i32 {
+        self.matches.value_of("stats-padding")
+            .map(|raw| raw.parse::<i32>()
+                .expect("invalid padding size")
+            ).unwrap()
+    }
+
+    /// Get the number of pixels for column spacing in the stats.
+    pub fn stats_column_spacing(&self) -> i32 {
+        self.matches.value_of("stats-col-spacing")
+            .map(|raw| raw.parse::<i32>()
+                .expect("invalid column spacing size")
             ).unwrap()
     }
 }

@@ -168,5 +168,10 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
     reporter.start();
 
     // Render the canvas
-    renderer.run(arg_handler.font_size());
+    renderer.run(
+        arg_handler.stats_font_size(),
+        arg_handler.stats_offset(),
+        arg_handler.stats_padding(),
+        arg_handler.stats_column_spacing(),
+    );
 }
