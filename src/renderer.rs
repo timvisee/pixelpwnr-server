@@ -85,7 +85,7 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, font_size: u8) {
         // Get the size of the canvas
         let size = self.pixmap.dimentions();
 
@@ -162,7 +162,7 @@ impl<'a> Renderer<'a> {
             dimentions,
             main_color.clone(),
             main_depth.clone(),
-            20,
+            font_size,
         ).expect("failed to initialize stats text renderer");
 
         // Keep rendering until we're done
