@@ -61,6 +61,12 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .help("Reporting interval of stats to stdout")
                 .default_value("5")
                 .takes_value(true))
+            .arg(Arg::with_name("font-size")
+                .long("font-size")
+                .value_name("PX")
+                .help("Screen status font size in pixels")
+                .default_value("20")
+                .takes_value(true))
             .get_matches();
 
         // Instantiate
@@ -138,5 +144,13 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 panic!("invalid stdout stats update interval, must be 0 or >1ms");
             })
             .unwrap()
+    }
+
+    /// Get the font size to use for the status text on the screen.
+    pub fn font_size(&self) -> u8 {
+        self.matches.value_of("font-size")
+            .map(|raw| raw.parse::<u8>()
+                .expect("invalid font size")
+            ).unwrap()
     }
 }

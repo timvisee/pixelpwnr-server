@@ -129,8 +129,11 @@ impl StatReporter {
     /// Report the stats to the screen.
     fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>) {
         *screen.lock().unwrap() = format!(
-            "px: {}   in: {}",
+            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet localhost 1234        \tin:\t{}\t{}",
+            stats.pixels_human(),
             stats.pixels_sec_human(),
+            stats.clients(),
+            stats.bytes_read_human(),
             stats.bytes_read_sec_human(),
         );
     }

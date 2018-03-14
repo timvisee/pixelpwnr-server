@@ -168,5 +168,5 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
     reporter.start();
 
     // Render the canvas
-    renderer.run();
+    renderer.run(arg_handler.font_size());
 }
