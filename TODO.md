@@ -1,8 +1,6 @@
-Full screen rendering
 Single shared thread pool
 Customizable thread pool size
 Customizable stats
-Persistent stats
 Make sure dead clients disconnect
 
 Spread all load, don't allow a single connection to consume all power
