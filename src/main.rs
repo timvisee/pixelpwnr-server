@@ -169,6 +169,7 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
 
     // Render the canvas
     renderer.run(
+        arg_handler.fullscreen(),
         arg_handler.stats_font_size(),
         arg_handler.stats_offset(),
         arg_handler.stats_padding(),

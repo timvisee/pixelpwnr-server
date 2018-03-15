@@ -47,6 +47,10 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .help("Canvas height (def: screen height)")
                 .display_order(3)
                 .takes_value(true))
+            .arg(Arg::with_name("fullscreen")
+                .long("fullscreen")
+                .short("f")
+                .help("Render in full screen"))
             .arg(Arg::with_name("stats-screen")
                 .long("stats-screen")
                 .value_name("SECONDS")
@@ -127,6 +131,11 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 )
                 .unwrap_or(600),
         )
+    }
+
+    /// Check whether we should render in full screen.
+    pub fn fullscreen(&self) -> bool {
+        self.matches.is_present("fullscreen")
     }
 
     /// The interval of stats reporting on the screen.
