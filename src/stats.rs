@@ -1,8 +1,12 @@
 extern crate number_prefix;
 
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
+use serde_yaml;
 use self::number_prefix::{
     binary_prefix,
     decimal_prefix,
@@ -234,5 +238,42 @@ impl StatsRaw {
             pixels,
             bytes_read,
         }
+    }
+
+    /// Load the raw stats to the file at the given path.
+    /// If no stats could be loaded, `None` is returned.
+    pub fn load(path: &Path) -> Option<Self> {
+        // Make sure the file exists
+        if !path.is_file() {
+            println!("Not loading persistent stats, file not found");
+            return None;
+        }
+
+        // Open a file
+        let mut file = File::open(path)
+            .expect("failed to open persistent stats file");
+
+        // Create a buffer, read from the file
+        let mut data = String::new();
+        file.read_to_string(&mut data)
+            .expect("failed to read persistent stats from file");
+
+        // Load the raw state
+        return serde_yaml::from_str(&data)
+            .map_err(|_| println!("failed to load persistent stats, malformed data"))
+            .ok();
+    }
+
+    /// Save the raw stats to the file at the given path.
+    pub fn save(&self, path: &Path) {
+        // Save the object to a string.
+        let data = serde_yaml::to_string(&self)
+            .expect("failed to serialize");
+
+        // Write the data to the file
+        let mut file = File::create(path)
+            .expect("failed to create persistent stats file");
+        file.write_all(data.as_bytes())
+            .expect("failed to write to persistent stats file");
     }
 }

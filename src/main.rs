@@ -40,7 +40,7 @@ use app::APP_NAME;
 use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
-use stats::Stats;
+use stats::{Stats, StatsRaw};
 use stat_reporter::StatReporter;
 
 // TODO: use some constant for new lines
@@ -55,8 +55,14 @@ fn main() {
     let pixmap = Arc::new(Pixmap::new(size.0, size.1));
     println!("Canvas size: {}x{}", size.0, size.1);
 
-    // Build a stats manager
-    let stats = Arc::new(Stats::new());
+    // Build a stats manager, load persistent stats
+    let mut stats = Stats::new();
+    if let Some(path) = arg_handler.stats_file() {
+        if let Some(raw) = StatsRaw::load(path.as_path()) {
+            stats.from_raw(&raw);
+        }
+    }
+    let stats = Arc::new(stats);
 
     // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
@@ -166,6 +172,8 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
     let reporter = StatReporter::new(
         arg_handler.stats_screen_interval(),
         arg_handler.stats_stdout_interval(),
+        Some(::std::time::Duration::from_secs(4)),
+        arg_handler.stats_file(),
         stats, 
         Some(stats_text),
     );

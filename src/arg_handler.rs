@@ -2,6 +2,7 @@ extern crate clap;
 extern crate num_cpus;
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::{Arg, ArgMatches, App};
@@ -51,6 +52,12 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .long("fullscreen")
                 .short("f")
                 .help("Render in full screen"))
+            .arg(Arg::with_name("stats-file")
+                .long("stats-file")
+                .alias("file")
+                .value_name("FILE")
+                .help("File to use for persistent stats")
+                .takes_value(true))
             .arg(Arg::with_name("stats-screen")
                 .long("stats-screen")
                 .value_name("SECONDS")
@@ -136,6 +143,12 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
     /// Check whether we should render in full screen.
     pub fn fullscreen(&self) -> bool {
         self.matches.is_present("fullscreen")
+    }
+
+    /// Get the file to use for persistent stats.
+    pub fn stats_file(&self) -> Option<PathBuf> {
+        self.matches.value_of("stats-file")
+            .map(|path| PathBuf::from(path))
     }
 
     /// The interval of stats reporting on the screen.

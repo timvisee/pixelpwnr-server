@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, sleep};
 use std::time::{Duration, SystemTime};
@@ -15,11 +16,21 @@ pub struct StatReporter {
     /// If none, no screen stats should be reported.
     stdout_interval: Option<Duration>,
 
+    /// The interval to save the persistent file with.
+    /// If none, no stats will be saved.
+    save_interval: Option<Duration>,
+
+    /// The file to save persistent stats to.
+    save_path: Option<PathBuf>,
+
     /// The last time the screen stats were updated.
     screen_last: Arc<Mutex<Option<SystemTime>>>,
 
     /// The last time the stdout stats were updated.
     stdout_last: Arc<Mutex<Option<SystemTime>>>,
+
+    /// The last time the stats were saved.
+    save_last: Arc<Mutex<Option<SystemTime>>>,
 
     /// A stats manager.
     stats: Arc<Stats>,
@@ -33,14 +44,19 @@ impl StatReporter {
     pub fn new(
         screen_interval: Option<Duration>,
         stdout_interval: Option<Duration>,
+        save_interval: Option<Duration>,
+        save_path: Option<PathBuf>,
         stats: Arc<Stats>,
         screen: Option<Arc<Mutex<String>>>,
     ) -> Self {
         StatReporter {
             screen_interval,
             stdout_interval,
+            save_interval,
+            save_path,
             screen_last: Arc::new(Mutex::new(None)),
             stdout_last: Arc::new(Mutex::new(None)),
+            save_last: Arc::new(Mutex::new(None)),
             stats,
             screen: Arc::new(screen),
         }
@@ -59,8 +75,11 @@ impl StatReporter {
         let screen = self.screen.clone();
         let screen_interval = self.screen_interval.clone();
         let stdout_interval = self.stdout_interval.clone();
+        let save_interval = self.save_interval.clone();
         let screen_last = self.screen_last.clone();
         let stdout_last = self.stdout_last.clone();
+        let save_last = self.save_last.clone();
+        let save_path = self.save_path.clone();
 
         // Update the statistics text each second in a separate thread
         thread::spawn(move || {
@@ -108,6 +127,37 @@ impl StatReporter {
                     // Report stats to the stdout
                     if last.is_none() || elapsed >= interval {
                         Self::report_stdout(&stats);
+                        *last = Some(
+                            SystemTime::now(),
+                        );
+                    }
+
+                    // See how long we should take, update the next update time
+                    next_update = min(
+                        next_update,
+                        interval.checked_sub(elapsed).unwrap_or(interval)
+                    );
+                }
+
+                // Check the stats save update time
+                if let Some(interval) = save_interval {
+                    // Get the last save time
+                    let mut last = save_last.lock().unwrap();
+
+                    // Get the number of elapsed seconds since the last save
+                    let elapsed = last.map(|last| last.elapsed().ok())
+                        .unwrap_or(None)
+                        .unwrap_or(Duration::from_secs(0));
+
+                    // Report stats to the stdout
+                    if last.is_none() || elapsed >= interval {
+                        // Create a raw stats instance
+                        println!("Saving persistent stats...");
+                        let raw = stats.to_raw();
+
+                        // Save the raw stats
+                        raw.save(save_path.as_ref().unwrap().as_path());
+
                         *last = Some(
                             SystemTime::now(),
                         );
