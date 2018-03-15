@@ -138,17 +138,26 @@ impl Stream for Lines {
             return Ok(Async::NotReady);
         }
 
-        // Try finding lines
-        // TODO: find any variation of new lines?
+        // Find the new line character
         let pos = self.rd
-            .windows(2)
+            .iter()
             .take(LINE_MAX_LENGTH)
-            .position(|bytes| bytes == b"\r\n");
+            .position(|b| *b == b'\n' || *b == b'\r');
 
         // Get the line, return it
         if let Some(pos) = pos {
+            // Find how many line ending chars this line ends with
+            let mut newlines = 1;
+            match self.rd.get(pos + 1) {
+                Some(b) => match *b {
+                    b'\n' | b'\r' => newlines = 2,
+                    _ => {},
+                },
+                _ => {},
+            }
+
             // Pull the line of the read buffer
-            let mut line = self.rd.split_to(pos + 2);
+            let mut line = self.rd.split_to(pos + newlines);
 
             // Skip empty lines
             if pos == 0 {
