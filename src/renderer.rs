@@ -87,6 +87,7 @@ impl<'a> Renderer<'a> {
 
     pub fn run(
         &mut self,
+        fullscreen: bool,
         stats_size: u8,
         stats_offset: (u32, u32),
         stats_padding: i32,
@@ -95,9 +96,18 @@ impl<'a> Renderer<'a> {
         // Get the size of the canvas
         let size = self.pixmap.dimentions();
 
+        // Select a monitor for full screening
+        // TODO: allow selecting a specific monitor
+        let mut monitor = if fullscreen {
+            Some(self.events_loop.get_primary_monitor())
+        } else {
+            None
+        };
+
         // Define a window builder
         let builder = WindowBuilder::new()
             .with_title(self.title.to_string())
+            .with_fullscreen(monitor)
             .with_dimensions(size.0 as u32, size.1 as u32);
 
         // Define the graphics context
