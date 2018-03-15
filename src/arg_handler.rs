@@ -58,6 +58,13 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
                 .value_name("FILE")
                 .help("File to use for persistent stats")
                 .takes_value(true))
+            .arg(Arg::with_name("stats-file-interval")
+                .long("stats-file-interval")
+                .alias("stats-save-interval")
+                .value_name("SECONDS")
+                .help("How often to save persistent stats")
+                .default_value("60")
+                .takes_value(true))
             .arg(Arg::with_name("stats-screen")
                 .long("stats-screen")
                 .value_name("SECONDS")
@@ -149,6 +156,20 @@ impl<'a: 'b, 'b> ArgHandler<'a> {
     pub fn stats_file(&self) -> Option<PathBuf> {
         self.matches.value_of("stats-file")
             .map(|path| PathBuf::from(path))
+    }
+
+    /// The interval of stats saving.
+    pub fn stats_save_interval(&self) -> Option<Duration> {
+        self.matches.value_of("stats-file-interval")
+            .expect("missing stats save interval option")
+            .parse::<f64>()
+            .map(|sec: f64| (sec * 1000f64) as u64)
+            .map(|millis| if millis > 0 {
+                Some(Duration::from_millis(millis))
+            } else {
+                panic!("invalid stats save interval, must be >1ms");
+            })
+            .expect("invalid stats save interval, must be number of seconds")
     }
 
     /// The interval of stats reporting on the screen.

@@ -172,7 +172,7 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
     let reporter = StatReporter::new(
         arg_handler.stats_screen_interval(),
         arg_handler.stats_stdout_interval(),
-        Some(::std::time::Duration::from_secs(4)),
+        arg_handler.stats_save_interval(),
         arg_handler.stats_file(),
         stats, 
         Some(stats_text),
