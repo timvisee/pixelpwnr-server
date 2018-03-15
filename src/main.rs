@@ -117,7 +117,7 @@ fn worker(
     // Build a CPU pool
     // TODO: share a CPU pool across all workers
     let pool = Builder::new()
-        .pool_size(1)
+        .pool_size(8)
         .name_prefix(format!("{}-worker", APP_NAME))
         .create();
 
