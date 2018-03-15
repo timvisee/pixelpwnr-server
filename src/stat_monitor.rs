@@ -124,6 +124,11 @@ impl StatMonitor {
         // Return the approximate the value change each second
         Some(delta / passed * 1_000_000f64)
     }
+
+    /// Reset the monitor.
+    pub fn reset(&mut self) {
+        self.ticks.clear();
+    }
 }
 
 impl fmt::Debug for StatMonitor {

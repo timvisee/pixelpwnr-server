@@ -196,4 +196,43 @@ impl Stats {
     pub fn inc_bytes_read(&self, amount: usize) {
         self.bytes_read.fetch_add(amount as u64, Ordering::SeqCst);
     }
+
+    /// Load data from the given raw stats object.
+    /// This overwrites the current stats data.
+    pub fn from_raw(&mut self, raw: &StatsRaw) {
+        // Store the values
+        self.pixels.store(raw.pixels, Ordering::SeqCst);
+        self.bytes_read.store(raw.bytes_read, Ordering::SeqCst);
+
+        // Reset the monitors
+        self.pixels_monitor.lock().unwrap().reset();
+        self.bytes_read_monitor.lock().unwrap().reset();
+    }
+
+    /// Convert this data in a raw stats object.
+    pub fn to_raw(&self) -> StatsRaw {
+        StatsRaw::new(self.pixels(), self.bytes_read())
+    }
+}
+
+/// A struct that contains raw stats data.
+/// This struct can be used to store and load stats data.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatsRaw {
+    /// The total number of pixels that have been written by clients to the
+    /// screen.
+    pub pixels: u64,
+
+    /// The total amount of bytes that have been read.
+    pub bytes_read: u64,
+}
+
+impl StatsRaw {
+    /// Construct a new raw stats object.
+    pub fn new(pixels: u64, bytes_read: u64) -> Self {
+        Self {
+            pixels,
+            bytes_read,
+        }
+    }
 }
