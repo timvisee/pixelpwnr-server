@@ -98,7 +98,7 @@ impl<'a> Renderer<'a> {
 
         // Select a monitor for full screening
         // TODO: allow selecting a specific monitor
-        let mut monitor = if fullscreen {
+        let monitor = if fullscreen {
             Some(self.events_loop.get_primary_monitor())
         } else {
             None
