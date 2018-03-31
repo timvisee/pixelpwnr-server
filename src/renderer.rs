@@ -272,6 +272,10 @@ impl<'a> Renderer<'a> {
         }
     }
 
+    pub fn run_default(&mut self) {
+        self.run(false, 20, (10, 10), 12, 20);
+    }
+
     pub fn stats(&self) -> &StatsRenderer<F> {
         &self.stats
     }

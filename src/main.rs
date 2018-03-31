@@ -31,5 +31,5 @@ pub fn main() {
     let mut renderer = Renderer::new("pixelpwnr-render", &pixmap);
 
     // Run
-    renderer.run();
+    renderer.run_default();
 }
