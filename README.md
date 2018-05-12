@@ -15,6 +15,14 @@ server in [Rust][rust].
 * Linux, Windows and macOS
 * ...
 
+## Current problems
+In the current prototype version, the following main problems exist:
+
+* Windows connectivity doesn't work
+* Connections not explicitly closed aren't dropped, as there is no timeout
+
+These should be fixed for the first release.
+
 ## Installation
 For installation, Git and Rust cargo are required.
 Install the latest version of Rust with [rustup][rustup].
