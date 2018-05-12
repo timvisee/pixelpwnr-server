@@ -7,7 +7,6 @@ extern crate clap;
 #[macro_use]
 extern crate futures;
 extern crate futures_cpupool;
-extern crate num_cpus;
 extern crate pixelpwnr_render;
 extern crate serde;
 #[macro_use]
@@ -99,9 +98,7 @@ fn main() {
 }
 
 fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
-    let num_threads = num_cpus::get();
     let pool = Builder::new()
-        .pool_size(num_threads)
         .name_prefix(format!("{}-worker", APP_NAME))
         .create();
 
