@@ -1,5 +1,3 @@
-#![feature(integer_atomics)]
-
 extern crate atoi;
 extern crate bufstream;
 extern crate bytes;

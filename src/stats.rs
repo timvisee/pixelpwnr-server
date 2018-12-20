@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_yaml;
 use self::number_prefix::{
@@ -25,17 +25,17 @@ use stat_monitor::StatMonitor;
 #[derive(Debug)]
 pub struct Stats {
     /// The number of clients that are currently connected.
-    clients: AtomicU32,
+    clients: AtomicUsize,
 
     /// The total number of pixels that have been written by clients to the
     /// screen.
-    pixels: AtomicU64,
+    pixels: AtomicUsize,
 
     /// A monitor for the number of pixels beign written this second.
     pixels_monitor: Mutex<StatMonitor>,
 
     /// The total amount of bytes that have been read.
-    bytes_read: AtomicU64,
+    bytes_read: AtomicUsize,
 
     /// A monitor for the number of bytes being read this second.
     bytes_read_monitor: Mutex<StatMonitor>,
@@ -45,22 +45,22 @@ impl Stats {
     /// Construct a new stats object.
     pub fn new() -> Self {
         Stats {
-            pixels: AtomicU64::new(0),
+            pixels: AtomicUsize::new(0),
             pixels_monitor: Mutex::new(StatMonitor::new()),
-            clients: AtomicU32::new(0),
-            bytes_read: AtomicU64::new(0),
+            clients: AtomicUsize::new(0),
+            bytes_read: AtomicUsize::new(0),
             bytes_read_monitor: Mutex::new(StatMonitor::new()),
         }
     }
 
     /// Get the total number of clients currently connected.
-    pub fn clients(&self) -> u32 {
+    pub fn clients(&self) -> usize {
         self.clients.load(Ordering::Relaxed)
     }
 
     /// Get the total number of pixels that have been written to the screen
     /// by clients.
-    pub fn pixels(&self) -> u64 {
+    pub fn pixels(&self) -> usize {
         self.pixels.load(Ordering::Relaxed)
     }
 
@@ -136,7 +136,7 @@ impl Stats {
     }
 
     /// Get the total number of bytes that have been read from clients.
-    pub fn bytes_read(&self) -> u64 {
+    pub fn bytes_read(&self) -> usize {
         self.bytes_read.load(Ordering::Relaxed)
     }
 
@@ -198,7 +198,7 @@ impl Stats {
     /// This method should not be invoked by something else to prevent
     /// poisoning the statistics.
     pub fn inc_bytes_read(&self, amount: usize) {
-        self.bytes_read.fetch_add(amount as u64, Ordering::SeqCst);
+        self.bytes_read.fetch_add(amount, Ordering::SeqCst);
     }
 
     /// Load data from the given raw stats object.
@@ -225,15 +225,15 @@ impl Stats {
 pub struct StatsRaw {
     /// The total number of pixels that have been written by clients to the
     /// screen.
-    pub pixels: u64,
+    pub pixels: usize,
 
     /// The total amount of bytes that have been read.
-    pub bytes_read: u64,
+    pub bytes_read: usize,
 }
 
 impl StatsRaw {
     /// Construct a new raw stats object.
-    pub fn new(pixels: u64, bytes_read: u64) -> Self {
+    pub fn new(pixels: usize, bytes_read: usize) -> Self {
         Self {
             pixels,
             bytes_read,

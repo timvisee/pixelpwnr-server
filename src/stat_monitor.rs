@@ -32,7 +32,7 @@ const TICKS_MAX_AGE_MICRO: u64 = 2_500_000;
 /// to determine the result as reliably as possible.
 /// Note that the result is thus approximate (and not exact).
 pub struct StatMonitor {
-    ticks: Vec<(u64, PreciseTime)>,
+    ticks: Vec<(usize, PreciseTime)>,
 }
 
 impl StatMonitor {
@@ -49,7 +49,7 @@ impl StatMonitor {
     /// A result is calculated based on the input, which is then returned.
     /// Note that this value is approximate and that `None` might be returned
     /// in some cases. See the documentation of `calculate()` for more details.
-    pub fn update(&mut self, value: u64) -> Option<f64> {
+    pub fn update(&mut self, value: usize) -> Option<f64> {
         // Get the current time, and the last time that was recorded
         let now = PreciseTime::now();
         let last = self.ticks.first().map(|i| i.1);
