@@ -45,7 +45,7 @@ cargo build --release
 ```
 
 ## Requirements
-* Rust nightly (v1.24 or higher)
+* Rust (v1.31 or higher)
 * Build essentials (Ubuntu package: `build-essential`)
 * `freetype2` development files (Ubuntu package: `libfreetype6-dev`)
 
