@@ -5,7 +5,6 @@ extern crate clap;
 #[macro_use]
 extern crate futures;
 extern crate futures_cpupool;
-extern crate num_cpus;
 extern crate pixelpwnr_render;
 extern crate serde;
 #[macro_use]
@@ -20,26 +19,26 @@ mod arg_handler;
 mod client;
 mod cmd;
 mod codec;
-mod stats;
 mod stat_monitor;
 mod stat_reporter;
+mod stats;
 
 use std::sync::Arc;
 use std::thread;
 
-use futures::prelude::*;
 use futures::future::Executor;
+use futures::prelude::*;
 use futures::sync::mpsc;
 use futures_cpupool::Builder;
 use pixelpwnr_render::{Pixmap, Renderer};
-use tokio::net::{TcpStream, TcpListener};
+use tokio::net::{TcpListener, TcpStream};
 
 use app::APP_NAME;
 use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
-use stats::{Stats, StatsRaw};
 use stat_reporter::StatReporter;
+use stats::{Stats, StatsRaw};
 
 // TODO: use some constant for new lines
 
@@ -67,30 +66,19 @@ fn main() {
     let stats_thread = stats.clone();
     let host = arg_handler.host();
     let server_thread = thread::spawn(move || {
-        // Second argument, the number of threads we'll be using
-        let num_threads = num_cpus::get();
-
         let listener = TcpListener::bind(&host).expect("failed to bind");
         println!("Listening on: {}", host);
 
-        // Spin up our worker threads, creating a channel routing to each worker
-        // thread that we'll use below.
-        let mut channels = Vec::new();
-        for _ in 0..num_threads {
-            let (tx, rx) = mpsc::unbounded();
-            channels.push(tx);
-            let pixmap_worker = pixmap_thread.clone();
-            let stats_worker = stats_thread.clone();
-            thread::spawn(|| worker(rx, pixmap_worker, stats_worker));
-        }
+        // Create a worker thread that assigns work to a futures threadpool
+        let (tx, rx) = mpsc::unbounded();
+        let pixmap_worker = pixmap_thread.clone();
+        let stats_worker = stats_thread.clone();
+        thread::spawn(|| worker(rx, pixmap_worker, stats_worker));
 
-        // Infinitely accept sockets from our `TcpListener`. Each socket is then
-        // shipped round-robin to a particular thread which will associate the
-        // socket with the corresponding event loop and process the connection.
-        let mut next = 0;
+        // Infinitely accept sockets from our `TcpListener`.
+        // Send work to the worker
         let srv = listener.incoming().for_each(|socket| {
-            channels[next].unbounded_send(socket).expect("worker thread died");
-            next = (next + 1) % channels.len();
+            tx.unbounded_send(socket).expect("worker thread died");
             Ok(())
         });
 
@@ -107,15 +95,8 @@ fn main() {
     }
 }
 
-fn worker(
-    rx: mpsc::UnboundedReceiver<TcpStream>,
-    pixmap: Arc<Pixmap>,
-    stats: Arc<Stats>,
-) {
-    // Build a CPU pool
-    // TODO: share a CPU pool across all workers
+fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
     let pool = Builder::new()
-        .pool_size(1)
         .name_prefix(format!("{}-worker", APP_NAME))
         .create();
 
@@ -172,7 +153,7 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
         arg_handler.stats_stdout_interval(),
         arg_handler.stats_save_interval(),
         arg_handler.stats_file(),
-        stats, 
+        stats,
         Some(stats_text),
     );
     reporter.start();
