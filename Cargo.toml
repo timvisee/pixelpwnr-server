@@ -4,13 +4,13 @@ version = "0.1.0"
 authors = ["Tim Visée <timvisee@gmail.com>"]
 
 [dependencies]
-image = "0.18"
+image = "0.20"
 gfx = "0.17"
-gfx_text = "0.22"
+gfx_text = "0.23"
 gfx_device_gl = "0.15"
 gfx_window_glutin = "0.20"
 glutin = "0.12"
-lazy_static = "1.0"
+lazy_static = "1.2"
 time = "0.1"
 
 [profile.release]
