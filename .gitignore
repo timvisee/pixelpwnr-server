@@ -1,4 +1,7 @@
 /target/
 **/*.rs.bk
-.*.swp
+.*.sw[pom]
 .idea
+
+# Custom stats file
+stats.yml
