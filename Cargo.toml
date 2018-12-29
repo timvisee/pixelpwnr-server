@@ -20,6 +20,7 @@ serde_yaml = "0.8"
 time = "0.1"
 tokio = "0.1"
 tokio-io = "0.1"
+tokio-io-pool = "0.1"
 
 [profile.release]
 lto = true

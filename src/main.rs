@@ -13,6 +13,7 @@ extern crate serde_yaml;
 extern crate tokio;
 #[macro_use]
 extern crate tokio_io;
+extern crate tokio_io_pool;
 
 mod app;
 mod arg_handler;
@@ -31,7 +32,9 @@ use futures::prelude::*;
 use futures::sync::mpsc;
 use futures_cpupool::Builder;
 use pixelpwnr_render::{Pixmap, Renderer};
+use tokio::prelude::*;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::codec::{Framed, LinesCodec};
 
 use app::APP_NAME;
 use arg_handler::ArgHandler;
@@ -61,10 +64,59 @@ fn main() {
     }
     let stats = Arc::new(stats);
 
+    let host = arg_handler.host();
+
+
+
+
+
+    // TODO: implement: tk-listen
+    // TODO: implement: tokio-io-pool
+
+    let listener = TcpListener::bind(&host).expect("failed to bind");
+
+    let server = listener
+        .incoming()
+        .map_err(|e| eprintln!("Listener error: {}", e))
+        .inspect(|_| {
+            println!("Connect");
+        })
+        .for_each(|socket| {
+            // TODO: use max length from constant
+            let codec = LinesCodec::new_with_max_length(80);
+
+            let framed = Framed::new(socket, codec);
+
+            let con = framed
+                .map_err(|e| eprintln!("Socket codec error: {:?}", e))
+                .for_each(|line| {
+                    // println!("Received line {}", line);
+                    Ok(())
+                });
+
+            tokio::spawn(con);
+
+            Ok(())
+        })
+        .inspect(|_| {
+            println!("Disconnect");
+        });
+
+    tokio_io_pool::run(server);
+
+    println!("DONE!!!!");
+
+
+
+
+
+
+
+
+
     // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
     let stats_thread = stats.clone();
-    let host = arg_handler.host();
     let server_thread = thread::spawn(move || {
         let listener = TcpListener::bind(&host).expect("failed to bind");
         println!("Listening on: {}", host);
