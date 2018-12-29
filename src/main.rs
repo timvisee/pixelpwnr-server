@@ -33,9 +33,8 @@ use futures::prelude::*;
 use futures::sync::mpsc;
 use futures_cpupool::Builder;
 use pixelpwnr_render::{Pixmap, Renderer};
-use tokio::prelude::*;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::codec::{Framed, LinesCodec};
+use tokio::codec::Framed;
 
 use app::APP_NAME;
 use arg_handler::ArgHandler;
@@ -74,8 +73,12 @@ fn main() {
 
     // TODO: implement: tk-listen
     // TODO: implement: tokio-io-pool
+    // TODO: implement: some sort of timeout
 
     let listener = TcpListener::bind(&host).expect("failed to bind");
+
+    let pixmap_shared = pixmap.clone();
+    let stats_shared = stats.clone();
 
     let server = listener
         .incoming()
@@ -83,18 +86,31 @@ fn main() {
         .inspect(|_| {
             println!("Connect");
         })
-        .for_each(|socket| {
+        .for_each(move |socket| {
             let codec = PixCodec::new();
 
             let framed = Framed::new(socket, codec);
 
+            let a = pixmap_shared.clone();
+            let b = stats_shared.clone();
+
             let con = framed
                 .map_err(|e| eprintln!("Socket codec error: {:?}", e))
-                .for_each(|line| {
-                    println!("Received line: {:?}", line);
+                .for_each(move |line| {
+
+                    // Invoke command
+                    match line {
+                        Ok(line) => {
+                            line.invoke(&a, &b);
+                        },
+                        Err(err) => println!("ERR: {:?}", err),
+                    }
+
                     Ok(())
                 });
 
+            // TODO: use spawn_all here provided by the tokio-io-pool crate here instead of
+            // spawning futures manually
             tokio::spawn(con);
 
             Ok(())

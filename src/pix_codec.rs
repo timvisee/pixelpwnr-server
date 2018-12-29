@@ -1,9 +1,10 @@
-use std::{cmp, io, str, usize};
+use std::io;
 
-use bytes::{BufMut, BytesMut};
+use app::LINE_LENGTH_MAX;
+use bytes::BytesMut;
 use tokio::codec::{Encoder, Decoder, LinesCodec};
 
-use cmd::Cmd;
+use cmd::{Request, RequestResult};
 
 /// A `Codec` implementation that handles the pixelflut protocol.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -14,8 +15,7 @@ pub struct PixCodec {
 impl PixCodec {
     /// Construct a new pix codec.
     pub fn new() -> Self {
-        // TODO: obtain the line limit number from a constant somewhere
-        Self::from(LinesCodec::new_with_max_length(80))
+        Self::from(LinesCodec::new_with_max_length(LINE_LENGTH_MAX))
     }
 
     /// Construct a new pix codec based on the given line codec.
@@ -27,38 +27,29 @@ impl PixCodec {
 }
 
 impl Decoder for PixCodec {
-    type Item = Result<Cmd, ()>;
-    // TODO: use a custom error type to describe all error cases
+    type Item = RequestResult;
     type Error = io::Error;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Result<Cmd, ()>>, io::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<RequestResult>, io::Error> {
         self.lines
             .decode(buf)
             .map(|line|
-                line.map(|line|
-                    // TODO: handle unrecognized commands
-                    Cmd::decode(line.as_bytes()).map_err(|e| ())
-                )
+                line.map(|line| Request::decode(line.as_bytes()))
             )
     }
 
     // TODO: is this required, it is already provided, does that work?
-    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Result<Cmd, ()>>, io::Error> {
+    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<RequestResult>, io::Error> {
         self.lines
             .decode_eof(buf)
             .map(|line|
-                line.map(|line|{
-                    println!("PARSING EOF: {}", line);
-
-                    // TODO: handle unrecognized commands
-                    Cmd::decode(line.as_bytes()).map_err(|e| ())
-                })
+                line.map(|line| Request::decode(line.as_bytes()))
             )
     }
 }
 
 impl Encoder for PixCodec {
-    // TODO: use a custom response type
+    // TODO: use a custom Response type
     type Item = String;
     type Error = io::Error;
 
