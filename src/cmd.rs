@@ -1,5 +1,4 @@
 use atoi::atoi;
-use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
 use app::{APP_NAME, APP_VERSION};
@@ -10,6 +9,7 @@ use stats::Stats;
 /// These commands may then be invoked on the pixel map state.
 /// A command might get or set the color of a pixel, or it
 /// might request help.
+#[derive(Debug)]
 pub enum Cmd {
     /// Get the color of a pixel.
     ///
@@ -37,7 +37,7 @@ pub enum Cmd {
 
 impl Cmd {
     /// Decode the command to run, from the given input bytes.
-    pub fn decode<'a>(input: Bytes) -> Result<Self, &'a str> {
+    pub fn decode<'a>(input: &[u8]) -> Result<Self, &'a str> {
         // Iterate over input parts
         let mut input = input
             .split(|b| b == &b' ')

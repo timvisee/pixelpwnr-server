@@ -20,6 +20,7 @@ mod arg_handler;
 mod client;
 mod cmd;
 mod codec;
+mod pix_codec;
 mod stat_monitor;
 mod stat_reporter;
 mod stats;
@@ -40,6 +41,7 @@ use app::APP_NAME;
 use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
+use pix_codec::PixCodec;
 use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
 
@@ -82,15 +84,14 @@ fn main() {
             println!("Connect");
         })
         .for_each(|socket| {
-            // TODO: use max length from constant
-            let codec = LinesCodec::new_with_max_length(80);
+            let codec = PixCodec::new();
 
             let framed = Framed::new(socket, codec);
 
             let con = framed
                 .map_err(|e| eprintln!("Socket codec error: {:?}", e))
                 .for_each(|line| {
-                    // println!("Received line {}", line);
+                    println!("Received line: {:?}", line);
                     Ok(())
                 });
 
