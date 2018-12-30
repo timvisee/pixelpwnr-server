@@ -5,7 +5,7 @@ use bytes::{BufMut, BytesMut};
 use futures::prelude::*;
 use pixelpwnr_render::Pixmap;
 
-use cmd::{Cmd, CmdResult};
+use cmd::ActionResult;
 use codec::Lines;
 use stats::Stats;
 
@@ -103,10 +103,10 @@ impl Future for Client {
                 // Do something with the result
                 match result {
                     // Do nothing
-                    CmdResult::Ok => {},
+                    ActionResult::Ok => {},
 
                     // Respond to the client
-                    CmdResult::Response(msg) => {
+                    ActionResult::Response(msg) => {
                         // Create a bytes buffer with the message
                         let mut bytes = BytesMut::with_capacity(msg.len());
                         bytes.put_slice(msg.as_bytes());
@@ -117,7 +117,7 @@ impl Future for Client {
                     },
 
                     // Report the error to the user
-                    CmdResult::ClientErr(err) => {
+                    ActionResult::ClientErr(err) => {
                         // Report the error to the client
                         self.respond_str(format!("ERR {}", err))
                             .expect("failed to flush write buffer");
@@ -126,7 +126,7 @@ impl Future for Client {
                     },
 
                     // Report the error to the server
-                    CmdResult::ServerErr(err) => {
+                    ActionResult::ServerErr(err) => {
                         // Show an error message in the console
                         println!("Client error \"{}\" occurred, disconnecting...", err);
 
@@ -135,7 +135,7 @@ impl Future for Client {
                     },
 
                     // Quit the connection
-                    CmdResult::Quit => return Ok(Async::Ready(())),
+                    ActionResult::Quit => return Ok(Async::Ready(())),
                 }
             } else {
                 // EOF was reached. The remote client has disconnected. There is

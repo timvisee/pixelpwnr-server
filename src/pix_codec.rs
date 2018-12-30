@@ -4,7 +4,7 @@ use app::LINE_LENGTH_MAX;
 use bytes::BytesMut;
 use tokio::codec::{Encoder, Decoder, LinesCodec};
 
-use cmd::{Request, RequestResult};
+use cmd::{Request, RequestResult, Response};
 
 /// A `Codec` implementation that handles the pixelflut protocol.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -49,11 +49,10 @@ impl Decoder for PixCodec {
 }
 
 impl Encoder for PixCodec {
-    // TODO: use a custom Response type
-    type Item = String;
+    type Item = Response;
     type Error = io::Error;
 
-    fn encode(&mut self, line: String, buf: &mut BytesMut) -> Result<(), io::Error> {
-        self.lines.encode(line, buf)
+    fn encode(&mut self, response: Response, buf: &mut BytesMut) -> Result<(), io::Error> {
+        self.lines.encode(response.to_string(), buf)
     }
 }

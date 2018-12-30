@@ -17,18 +17,23 @@ extern crate tokio_io_pool;
 
 mod app;
 mod arg_handler;
-mod client;
+// mod client;
 mod cmd;
+// TODO: remove this module
 mod codec;
 mod pix_codec;
 mod stat_monitor;
 mod stat_reporter;
 mod stats;
 
+use std::io;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
 
+use futures::Future;
 use futures::future::Executor;
+use futures::future::ok;
 use futures::prelude::*;
 use futures::sync::mpsc;
 use futures_cpupool::Builder;
@@ -38,13 +43,17 @@ use tokio::codec::Framed;
 
 use app::APP_NAME;
 use arg_handler::ArgHandler;
-use client::Client;
+// use client::Client;
+use cmd::ActionResult;
+use cmd::Response;
 use codec::Lines;
 use pix_codec::PixCodec;
 use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
 
-// TODO: use some constant for new lines
+// TODO: implement: tk-listen
+// TODO: implement: tokio-io-pool
+// TODO: implement: some sort of timeout
 
 /// Main application entrypoint.
 fn main() {
@@ -65,97 +74,23 @@ fn main() {
     }
     let stats = Arc::new(stats);
 
+    // Get the host to use
     let host = arg_handler.host();
-
-
-
-
-
-    // TODO: implement: tk-listen
-    // TODO: implement: tokio-io-pool
-    // TODO: implement: some sort of timeout
-
-    let listener = TcpListener::bind(&host).expect("failed to bind");
-
-    let pixmap_shared = pixmap.clone();
-    let stats_shared = stats.clone();
-
-    let server = listener
-        .incoming()
-        .map_err(|e| eprintln!("Listener error: {}", e))
-        .inspect(|_| {
-            println!("Connect");
-        })
-        .for_each(move |socket| {
-            let codec = PixCodec::new();
-
-            let framed = Framed::new(socket, codec);
-
-            let a = pixmap_shared.clone();
-            let b = stats_shared.clone();
-
-            let con = framed
-                .map_err(|e| eprintln!("Socket codec error: {:?}", e))
-                .for_each(move |line| {
-
-                    // Invoke command
-                    match line {
-                        Ok(line) => {
-                            line.invoke(&a, &b);
-                        },
-                        Err(err) => println!("ERR: {:?}", err),
-                    }
-
-                    Ok(())
-                });
-
-            // TODO: use spawn_all here provided by the tokio-io-pool crate here instead of
-            // spawning futures manually
-            tokio::spawn(con);
-
-            Ok(())
-        })
-        .inspect(|_| {
-            println!("Disconnect");
-        });
-
-    tokio_io_pool::run(server);
-
-    println!("DONE!!!!");
-
-
-
-
-
-
-
-
 
     // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
     let stats_thread = stats.clone();
     let server_thread = thread::spawn(move || {
-        let listener = TcpListener::bind(&host).expect("failed to bind");
-        println!("Listening on: {}", host);
+        // Build the server future
+        let server = server(&host, pixmap_thread.clone(), stats_thread.clone());
 
-        // Create a worker thread that assigns work to a futures threadpool
-        let (tx, rx) = mpsc::unbounded();
-        let pixmap_worker = pixmap_thread.clone();
-        let stats_worker = stats_thread.clone();
-        thread::spawn(|| worker(rx, pixmap_worker, stats_worker));
-
-        // Infinitely accept sockets from our `TcpListener`.
-        // Send work to the worker
-        let srv = listener.incoming().for_each(|socket| {
-            tx.unbounded_send(socket).expect("worker thread died");
-            Ok(())
-        });
-
-        srv.wait().unwrap();
+        // Run the future using the tokio thread pool
+        tokio_io_pool::run(server);
     });
 
     // Render the pixelflut screen
     if !arg_handler.no_render() {
+        // TODO: build a future for rendering
         render(&arg_handler, &pixmap, stats);
     } else {
         // Do not render, wait on the server thread instead
@@ -164,49 +99,123 @@ fn main() {
     }
 }
 
-fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
-    let pool = Builder::new()
-        .name_prefix(format!("{}-worker", APP_NAME))
-        .create();
+/// Build the pixelflut server future.
+fn server(host: &SocketAddr, pixmap: Arc<Pixmap>, stats: Arc<Stats>)
+    -> impl Future<Item = (), Error = ()>
+{
+    // Set up the connection listener
+    let listener = TcpListener::bind(host)
+        .expect("failed to bind");
+    println!("Listening on: {}", host);
 
-    let done = rx.for_each(move |socket| {
-        // A client connected, ensure we're able to get it's address
-        let addr = socket.peer_addr().expect("failed to get remote address");
-        println!("A client connected (from: {})", addr);
+    listener
+        .incoming()
+        .map_err(|e| eprintln!("Listener error: {}", e))
+        .inspect(|_| {
+            // TODO: remove after debugging
+            println!("Client connected");
+        })
+        .for_each(move |socket| {
+            // Define the codec to use for the socket
+            let codec = PixCodec::new();
+            let framed = Framed::new(socket, codec);
 
-        // Increase the number of clients
-        stats.inc_clients();
+            // Split the sending and receiving end
+            let (sink, stream) = framed.split();
 
-        // Wrap the socket with the Lines codec,
-        // to interact with lines instead of raw bytes
-        let lines = Lines::new(socket, stats.clone());
+            // Clone references to the pixmap and stats objects
+            let pixmap_shared = pixmap.clone();
+            let stats_shared = stats.clone();
 
-        // Define a client as connection
-        let disconnect_stats = stats.clone();
-        let connection = Client::new(lines, pixmap.clone(), stats.clone())
-            .map_err(|e| {
-                // Handle connection errors, show an error message
-                println!("Client connection error: {:?}", e);
-            })
-            .then(move |_| -> Result<_, _> {
-                // Print a disconnect message
-                println!("A client disconnected (from: {})", addr);
+            // Build the connection handling future, spawn it on the thread pool
+            let stream_handler = stream
+                .map_err(|e| eprintln!("Socket codec error: {:?}", e))
+                .map(move |line| {
+                    match line {
+                        Ok(line) => line.invoke(&pixmap_shared, &stats_shared),
+                        Err(err) => {
+                            println!("TODO ERR: {:?}", err);
+                            ActionResult::ServerErr(err.description().into())
+                        },
+                    }
+                })
+                .map(|result| -> Option<Response> {
+                    match result {
+                        ActionResult::Ok => None,
+                        ActionResult::Response(r) => Some(r),
+                        ActionResult::ClientErr(e) => {
+                            eprintln!("TODO: Client err: {}", e);
+                            None
+                        },
+                        ActionResult::ServerErr(e) => {
+                            eprintln!("TODO: Server err: {}", e);
+                            None
+                        },
+                        ActionResult::Quit => {
+                            eprintln!("TODO: Quit client!");
+                            None
+                        },
+                    }
+                })
+                // TODO: remove throwing away errors
+                .map_err(|_| io::Error::last_os_error())
+                .filter_map(|r| -> Option<Response> { r });
 
-                // Decreasde the client connections number
-                disconnect_stats.dec_clients();
+            let sink_handler = sink.send_all(stream_handler)
+                .map(|_| ())
+                .map_err(|_| ());
 
-                Ok(())
-            });
-
-        // Add the connection future to the pool on this thread
-        pool.execute(connection).unwrap();
-
-        Ok(())
-    });
-
-    // Handle all connection futures, and wait until we're done
-    done.wait().unwrap();
+            tokio::spawn(sink_handler)
+        })
+        .inspect(|_| {
+            // TODO: remove after debugging
+            println!("Client disconnected");
+        })
 }
+
+// fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
+//     let pool = Builder::new()
+//         .name_prefix(format!("{}-worker", APP_NAME))
+//         .create();
+
+//     let done = rx.for_each(move |socket| {
+//         // A client connected, ensure we're able to get it's address
+//         let addr = socket.peer_addr().expect("failed to get remote address");
+//         println!("A client connected (from: {})", addr);
+
+//         // Increase the number of clients
+//         stats.inc_clients();
+
+//         // Wrap the socket with the Lines codec,
+//         // to interact with lines instead of raw bytes
+//         let lines = Lines::new(socket, stats.clone());
+
+//         // Define a client as connection
+//         let disconnect_stats = stats.clone();
+//         let connection = Client::new(lines, pixmap.clone(), stats.clone())
+//             .map_err(|e| {
+//                 // Handle connection errors, show an error message
+//                 println!("Client connection error: {:?}", e);
+//             })
+//             .then(move |_| -> Result<_, _> {
+//                 // Print a disconnect message
+//                 println!("A client disconnected (from: {})", addr);
+
+//                 // Decreasde the client connections number
+//                 disconnect_stats.dec_clients();
+
+//                 Ok(())
+//             });
+
+//         // Add the connection future to the pool on this thread
+//         pool.execute(connection).unwrap();
+
+//         Ok(())
+//     });
+
+//     // Handle all connection futures, and wait until we're done
+//     done.wait().unwrap();
+// }
 
 /// Start the pixel map renderer.
 fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
