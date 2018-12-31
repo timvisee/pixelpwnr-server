@@ -52,7 +52,6 @@ use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
 
 // TODO: implement: tk-listen
-// TODO: implement: tokio-io-pool
 // TODO: implement: some sort of timeout
 
 /// Main application entrypoint.
@@ -81,11 +80,10 @@ fn main() {
     let pixmap_thread = pixmap.clone();
     let stats_thread = stats.clone();
     let server_thread = thread::spawn(move || {
-        // Build the server future
-        let server = server(&host, pixmap_thread.clone(), stats_thread.clone());
-
-        // Run the future using the tokio thread pool
-        tokio_io_pool::run(server);
+        // Build the server future, run it in a threadpool
+        tokio_io_pool::run(
+            server(&host, pixmap_thread.clone(), stats_thread.clone()),
+        );
     });
 
     // Render the pixelflut screen
@@ -108,36 +106,42 @@ fn server(host: &SocketAddr, pixmap: Arc<Pixmap>, stats: Arc<Stats>)
         .expect("failed to bind");
     println!("Listening on: {}", host);
 
+    let stats_connect = stats.clone();
+
     listener
         .incoming()
         .map_err(|e| eprintln!("Listener error: {}", e))
-        .inspect(|_| {
-            // TODO: remove after debugging
-            println!("Client connected");
+        .inspect(move |ref socket| {
+            // Client connected, report the address
+            if let Ok(addr) = socket.peer_addr() {
+                println!("Client connected (from: {})", addr);
+            } else {
+                println!("Client connected (unknown address)");
+            }
+
+            // Increase the client count
+            stats_connect.inc_clients();
         })
         .for_each(move |socket| {
-            // Define the codec to use for the socket
+            // Define the codec to use for the socket, split stream and sink
             let codec = PixCodec::new();
             let framed = Framed::new(socket, codec);
-
-            // Split the sending and receiving end
-            let (sink, stream) = framed.split();
+            let (tx, rx) = framed.split();
 
             // Clone references to the pixmap and stats objects
             let pixmap_shared = pixmap.clone();
             let stats_shared = stats.clone();
+            let stats_disconnect = stats.clone();
 
             // Build the connection handling future, spawn it on the thread pool
-            let stream_handler = stream
+            let rx_future = rx
                 .map_err(|e| eprintln!("Socket codec error: {:?}", e))
-                .map(move |line| {
-                    match line {
-                        Ok(line) => line.invoke(&pixmap_shared, &stats_shared),
-                        Err(err) => {
-                            println!("TODO ERR: {:?}", err);
-                            ActionResult::ServerErr(err.description().into())
-                        },
-                    }
+                .map(move |line| match line {
+                    Ok(line) => line.invoke(&pixmap_shared, &stats_shared),
+                    Err(err) => {
+                        println!("TODO ERR: {:?}", err);
+                        ActionResult::ServerErr(err.description().into())
+                    },
                 })
                 .map(|result| -> Option<Response> {
                     match result {
@@ -145,11 +149,11 @@ fn server(host: &SocketAddr, pixmap: Arc<Pixmap>, stats: Arc<Stats>)
                         ActionResult::Response(r) => Some(r),
                         ActionResult::ClientErr(e) => {
                             eprintln!("TODO: Client err: {}", e);
-                            None
+                            Some(Response::Error(e))
                         },
                         ActionResult::ServerErr(e) => {
                             eprintln!("TODO: Server err: {}", e);
-                            None
+                            Some(Response::Error(e))
                         },
                         ActionResult::Quit => {
                             eprintln!("TODO: Quit client!");
@@ -159,25 +163,30 @@ fn server(host: &SocketAddr, pixmap: Arc<Pixmap>, stats: Arc<Stats>)
                 })
                 // TODO: remove throwing away errors
                 .map_err(|_| io::Error::last_os_error())
-                .filter_map(|r| -> Option<Response> { r });
+                .filter_map(|r| r);
 
-            let sink_handler = sink.send_all(stream_handler)
+            // Build the future for responding
+            let tx_future = tx
+                .send_all(rx_future)
                 .map(|_| ())
                 .map_err(|_| ());
 
-            tokio::spawn(sink_handler)
-        })
-        .inspect(|_| {
-            // TODO: remove after debugging
-            println!("Client disconnected");
+            let disconnect_future = tx_future
+                .inspect(move |_| {
+                    // TODO: chain after map instead of for_each
+
+                    println!("Client disconnected");
+
+                    // Increase the client count
+                    stats_disconnect.dec_clients();
+                });
+
+            // Spawn the task
+            tokio::spawn(disconnect_future)
         })
 }
 
 // fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
-//     let pool = Builder::new()
-//         .name_prefix(format!("{}-worker", APP_NAME))
-//         .create();
-
 //     let done = rx.for_each(move |socket| {
 //         // A client connected, ensure we're able to get it's address
 //         let addr = socket.peer_addr().expect("failed to get remote address");

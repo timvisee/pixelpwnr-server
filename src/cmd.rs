@@ -173,6 +173,9 @@ pub enum Response {
     /// Respond with help.
     /// The `help` information.
     Help,
+
+    /// Respond with an error.
+    Error(String),
 }
 
 impl Response {
@@ -190,6 +193,7 @@ impl Response {
                     HELP - HELP         >>  HELP ...\r\n\
                     HELP - QUIT\
                 ", APP_NAME, APP_VERSION),
+            Response::Error(e) => format!("ERR {}", e),
         }
     }
 }
