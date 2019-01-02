@@ -1,58 +1,54 @@
-use std::io;
+use std::io::{
+    Error as IoError,
+    Result as IoResult,
+};
 
 use app::LINE_LENGTH_MAX;
 use bytes::BytesMut;
-use tokio::codec::{Encoder, Decoder, LinesCodec};
+use tokio::codec::{Encoder, Decoder};
 
 use cmd::{Request, RequestResult, Response};
 
 /// A `Codec` implementation that handles the pixelflut protocol.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct PixCodec {
-    lines: LinesCodec,
-}
+#[derive(Clone, Debug)]
+pub struct PixCodec;
 
 impl PixCodec {
     /// Construct a new pix codec.
     pub fn new() -> Self {
-        Self::from(LinesCodec::new_with_max_length(LINE_LENGTH_MAX))
-    }
-
-    /// Construct a new pix codec based on the given line codec.
-    pub fn from(lines: LinesCodec) -> Self {
-        Self {
-            lines,
-        }
+        Self
     }
 }
 
 impl Decoder for PixCodec {
     type Item = RequestResult;
-    type Error = io::Error;
+    type Error = IoError;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<RequestResult>, io::Error> {
-        self.lines
-            .decode(buf)
-            .map(|line|
-                line.map(|line| Request::decode(line.as_bytes()))
-            )
-    }
+    fn decode(&mut self, buf: &mut BytesMut) -> IoResult<Option<RequestResult>> {
+        if let Some(i) = buf.iter().position(|&b| b == b'\n') {
+            // Split the line of the buffer, take a slice without the newline
+            let line = buf.split_to(i + 1);
+            let line = &line[..line.len() - 1];
 
-    // TODO: is this required, it is already provided, does that work?
-    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<RequestResult>, io::Error> {
-        self.lines
-            .decode_eof(buf)
-            .map(|line|
-                line.map(|line| Request::decode(line.as_bytes()))
-            )
+            Ok(Some(Request::decode(line)))
+        } else if buf.len() > LINE_LENGTH_MAX { // longest possible command
+            // Err(ErrorKind::LineTooLong.into())
+            // TODO: report line too long error
+            eprintln!("LINE TOO LONG!");
+            // TODO: consume bytes
+            Ok(None)
+        } else {
+            Ok(None)
+        }
     }
 }
 
 impl Encoder for PixCodec {
     type Item = Response;
-    type Error = io::Error;
+    type Error = IoError;
 
-    fn encode(&mut self, response: Response, buf: &mut BytesMut) -> Result<(), io::Error> {
-        self.lines.encode(response.to_string(), buf)
+    fn encode(&mut self, command: Response, buf: &mut BytesMut) -> IoResult<()> {
+        buf.extend(format!("{}\n", command.to_string()).as_bytes());
+        Ok(())
     }
 }
