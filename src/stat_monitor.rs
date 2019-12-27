@@ -2,7 +2,7 @@ extern crate time;
 
 use std::fmt;
 
-use self::time::PreciseTime;
+use self::time::Instant;
 
 /// The maximum number of ticks that may be remembered to use for calculations.
 /// You don't want too many ticks, as the calculation would possibly be
@@ -32,15 +32,13 @@ const TICKS_MAX_AGE_MICRO: u64 = 2_500_000;
 /// to determine the result as reliably as possible.
 /// Note that the result is thus approximate (and not exact).
 pub struct StatMonitor {
-    ticks: Vec<(usize, PreciseTime)>,
+    ticks: Vec<(usize, Instant)>,
 }
 
 impl StatMonitor {
     /// Construct a new monitor.
     pub fn new() -> Self {
-        StatMonitor {
-            ticks: Vec::new(),
-        }
+        StatMonitor { ticks: Vec::new() }
     }
 
     /// Update the monitor by pushing a new value.
@@ -51,12 +49,12 @@ impl StatMonitor {
     /// in some cases. See the documentation of `calculate()` for more details.
     pub fn update(&mut self, value: usize) -> Option<f64> {
         // Get the current time, and the last time that was recorded
-        let now = PreciseTime::now();
+        let now = Instant::now();
         let last = self.ticks.first().map(|i| i.1);
 
         // The difference between now and the last time must be large enough
         if let Some(last) = last {
-            if (last.to(now).num_microseconds().unwrap() as u64) < TICKS_MIN_INTERVAL_MICRO {
+            if ((now - last).whole_microseconds() as u64) < TICKS_MIN_INTERVAL_MICRO {
                 return self.calculate();
             }
         }
@@ -79,7 +77,7 @@ impl StatMonitor {
     /// And it removes ticks that have been in the list for too long.
     ///
     /// The current time should be passed to `now`.
-    fn decay(&mut self, now: PreciseTime) {
+    fn decay(&mut self, now: Instant) {
         // Truncate ticks if we have to many
         self.ticks.truncate(TICKS_MAX);
 
@@ -89,11 +87,11 @@ impl StatMonitor {
             let old = self.ticks.last().unwrap().1;
 
             // If the tick is too old, truncate all ticks that are too old
-            if old.to(now).num_microseconds().unwrap() as u64 > TICKS_MAX_AGE_MICRO {
+            if ((now - old).whole_microseconds() as u64) > TICKS_MAX_AGE_MICRO {
                 // Find the truncation point and truncate
-                if let Some(pos) = self.ticks.iter().position(
-                    |&(_, time)| time.to(now).num_microseconds().unwrap() as u64 > TICKS_MAX_AGE_MICRO
-                ) {
+                if let Some(pos) = self.ticks.iter().position(|&(_, time)| {
+                    (now - time).whole_microseconds() as u64 > TICKS_MAX_AGE_MICRO
+                }) {
                     self.ticks.truncate(pos);
                 }
             }
@@ -119,7 +117,7 @@ impl StatMonitor {
 
         // Determine the difference in value and time
         let delta = (new.0 - old.0) as f64;
-        let passed = old.1.to(new.1).num_microseconds().unwrap() as f64;
+        let passed = (new.1 - old.1).whole_microseconds() as f64;
 
         // Return the approximate the value change each second
         Some(delta / passed * 1_000_000f64)

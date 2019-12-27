@@ -3,16 +3,11 @@ extern crate number_prefix;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
+use self::number_prefix::{NumberPrefix, Prefixed, Standalone};
 use serde_yaml;
-use self::number_prefix::{
-    binary_prefix,
-    decimal_prefix,
-    Standalone,
-    Prefixed,
-};
 
 use stat_monitor::StatMonitor;
 
@@ -67,15 +62,17 @@ impl Stats {
     /// Get the total number of pixels that have been written to the screen
     /// by clients as a string in a humanly readable format.
     pub fn pixels_human(&self) -> String {
-        match decimal_prefix(self.pixels() as f64) {
+        match NumberPrefix::decimal(self.pixels() as f64) {
             Standalone(b) => format!("{:.00} P", b.ceil()),
-            Prefixed(p, n) => if n < 10f64 {
+            Prefixed(p, n) => {
+                if n < 10f64 {
                     format!("{:.02} {}P", n, p)
                 } else if n < 100f64 {
                     format!("{:.01} {}P", n, p)
                 } else {
                     format!("{:.00} {}P", n, p)
-                },
+                }
+            }
         }
     }
 
@@ -86,9 +83,7 @@ impl Stats {
     /// reliably, `None` is returned.
     pub fn pixels_sec(&self) -> Option<f64> {
         // Get a lock on the value monitor, update and retrieve the result
-        self.pixels_monitor.lock()
-            .ok()?
-            .update(self.pixels())
+        self.pixels_monitor.lock().ok()?.update(self.pixels())
     }
 
     /// Get the total number of pixels that have been written to the screen
@@ -99,17 +94,18 @@ impl Stats {
     /// reliably, `None` is returned.
     pub fn pixels_sec_human(&self) -> String {
         match self.pixels_sec() {
-            Some(px) =>
-                match decimal_prefix(px) {
-                    Standalone(b) => format!("{:.00} P/s", b.ceil()),
-                    Prefixed(p, n) => if n < 10f64 {
-                            format!("{:.02} {}P/s", n, p)
-                        } else if n < 100f64 {
-                            format!("{:.01} {}P/s", n, p)
-                        } else {
-                            format!("{:.00} {}P/s", n, p)
-                        },
-                },
+            Some(px) => match NumberPrefix::decimal(px) {
+                Standalone(b) => format!("{:.00} P/s", b.ceil()),
+                Prefixed(p, n) => {
+                    if n < 10f64 {
+                        format!("{:.02} {}P/s", n, p)
+                    } else if n < 100f64 {
+                        format!("{:.01} {}P/s", n, p)
+                    } else {
+                        format!("{:.00} {}P/s", n, p)
+                    }
+                }
+            },
             None => String::from("~"),
         }
     }
@@ -143,15 +139,17 @@ impl Stats {
     /// Get the total number of bytes that have been read from clients
     /// as a string in a humanly readable format.
     pub fn bytes_read_human(&self) -> String {
-        match binary_prefix(self.bytes_read() as f64) {
+        match NumberPrefix::binary(self.bytes_read() as f64) {
             Standalone(b) => format!("{:.00} B", b.ceil()),
-            Prefixed(p, n) => if n < 10f64 {
+            Prefixed(p, n) => {
+                if n < 10f64 {
                     format!("{:.02} {}B", n, p)
                 } else if n < 100f64 {
                     format!("{:.01} {}B", n, p)
                 } else {
                     format!("{:.00} {}B", n, p)
-                },
+                }
+            }
         }
     }
 
@@ -162,7 +160,8 @@ impl Stats {
     /// reliably, `None` is returned.
     pub fn bytes_read_sec(&self) -> Option<f64> {
         // Get a lock on the value monitor, update and retrieve the result
-        self.bytes_read_monitor.lock()
+        self.bytes_read_monitor
+            .lock()
             .ok()?
             .update(self.bytes_read())
     }
@@ -175,17 +174,18 @@ impl Stats {
     /// reliably, `None` is returned.
     pub fn bytes_read_sec_human(&self) -> String {
         match self.bytes_read_sec() {
-            Some(bytes) =>
-                match decimal_prefix(bytes * 8f64) {
-                    Standalone(b) => format!("{:.00} b/s", b.ceil()),
-                    Prefixed(p, n) => if n < 10f64 {
-                            format!("{:.02} {}b/s", n, p)
-                        } else if n < 100f64 {
-                            format!("{:.01} {}b/s", n, p)
-                        } else {
-                            format!("{:.00} {}b/s", n, p)
-                        },
-                },
+            Some(bytes) => match NumberPrefix::decimal(bytes * 8f64) {
+                Standalone(b) => format!("{:.00} b/s", b.ceil()),
+                Prefixed(p, n) => {
+                    if n < 10f64 {
+                        format!("{:.02} {}b/s", n, p)
+                    } else if n < 100f64 {
+                        format!("{:.01} {}b/s", n, p)
+                    } else {
+                        format!("{:.00} {}b/s", n, p)
+                    }
+                }
+            },
             None => String::from("~"),
         }
     }
@@ -234,10 +234,7 @@ pub struct StatsRaw {
 impl StatsRaw {
     /// Construct a new raw stats object.
     pub fn new(pixels: usize, bytes_read: usize) -> Self {
-        Self {
-            pixels,
-            bytes_read,
-        }
+        Self { pixels, bytes_read }
     }
 
     /// Load the raw stats to the file at the given path.
@@ -250,8 +247,7 @@ impl StatsRaw {
         }
 
         // Open a file
-        let mut file = File::open(path)
-            .expect("failed to open persistent stats file");
+        let mut file = File::open(path).expect("failed to open persistent stats file");
 
         // Create a buffer, read from the file
         let mut data = String::new();
@@ -267,12 +263,10 @@ impl StatsRaw {
     /// Save the raw stats to the file at the given path.
     pub fn save(&self, path: &Path) {
         // Save the object to a string.
-        let data = serde_yaml::to_string(&self)
-            .expect("failed to serialize");
+        let data = serde_yaml::to_string(&self).expect("failed to serialize");
 
         // Write the data to the file
-        let mut file = File::create(path)
-            .expect("failed to create persistent stats file");
+        let mut file = File::create(path).expect("failed to create persistent stats file");
         file.write_all(data.as_bytes())
             .expect("failed to write to persistent stats file");
     }
