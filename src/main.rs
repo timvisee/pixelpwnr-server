@@ -110,9 +110,10 @@ async fn worker(
             let lines = Pin::new(&mut lines);
             let connection = Client::new(lines, pixmap, stats);
 
-            connection.await;
+            let result = connection.await;
+
             // Print a disconnect message
-            println!("A client disconnected (from: {})", addr);
+            println!("A client disconnected (from: {}). Reason: {}", addr, result);
 
             // Decreasde the client connections number
             disconnect_stats.dec_clients();

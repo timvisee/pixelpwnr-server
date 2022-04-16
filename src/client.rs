@@ -97,9 +97,9 @@ impl<'a, T> Future for Client<'a, T>
 where
     T: AsyncRead + AsyncWrite,
 {
-    type Output = ();
+    type Output = String;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<()> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<String> {
         // Read new lines from the socket
         while let Poll::Ready(line) = self.lines.as_mut().poll_next(cx) {
             if let Some(message) = line {
@@ -113,7 +113,7 @@ where
                         self.respond_str(cx, format!("ERR {}", err))
                             .expect("failed to flush write buffer");
 
-                        continue;
+                        return Poll::Ready("Command decoding failed".to_string());
                     }
                     Ok(cmd) => cmd,
                 };
@@ -143,7 +143,7 @@ where
                         self.respond_str(cx, format!("ERR {}", err))
                             .expect("failed to flush write buffer");
 
-                        // TODO: disconnect the client after sending
+                        return Poll::Ready(format!("Client error: {}", err));
                     }
 
                     // Report the error to the server
@@ -152,16 +152,16 @@ where
                         println!("Client error \"{}\" occurred, disconnecting...", err);
 
                         // Disconnect the client
-                        return Poll::Ready(());
+                        return Poll::Ready(format!("Server error occured. {}", err));
                     }
 
                     // Quit the connection
-                    CmdResult::Quit => return Poll::Ready(()),
+                    CmdResult::Quit => return Poll::Ready("Client quit".to_string()),
                 }
             } else {
                 // EOF was reached. The remote client has disconnected. There is
                 // nothing more to do.
-                return Poll::Ready(());
+                return Poll::Ready("Eof was reached".to_string());
             }
         }
 

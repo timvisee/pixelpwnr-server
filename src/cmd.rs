@@ -2,7 +2,10 @@ use atoi::atoi;
 use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
-use crate::stats::Stats;
+use crate::{
+    codec::{PXB_CMD_SIZE, PXB_PREFIX},
+    stats::Stats,
+};
 
 /// A set of pixel commands a client might send.
 ///
@@ -42,23 +45,27 @@ impl Cmd {
             .split(|b| b == &b' ')
             .filter(|part| !part.is_empty());
 
+        // Binary pixel command short-circuit
+        if input_bytes.len() == PXB_CMD_SIZE && input_bytes[..PXB_PREFIX.len()] == PXB_PREFIX {
+            const OFF: usize = PXB_PREFIX.len();
+            let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
+            let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
+
+            let r = input_bytes[OFF + 4];
+            let g = input_bytes[OFF + 5];
+            let b = input_bytes[OFF + 6];
+            let a = input_bytes[OFF + 7];
+
+            return Ok(Cmd::SetPixel(
+                x as usize,
+                y as usize,
+                Color::from_rgba(r, g, b, a),
+            ));
+        }
+
         // Decode the command
         match input.next() {
             Some(cmd) => match cmd {
-                // Binary pixel command
-                b"PXB" => {
-                    let x =
-                        u16::from_le_bytes(input_bytes[4..6].try_into().expect("Weird")) as usize;
-                    let y =
-                        u16::from_le_bytes(input_bytes[6..8].try_into().expect("Weird")) as usize;
-
-                    let r = input_bytes[8];
-                    let g = input_bytes[9];
-                    let b = input_bytes[10];
-                    let a = input_bytes[11];
-
-                    return Ok(Cmd::SetPixel(x, y, Color::from_rgba(r, g, b, a)));
-                }
                 // Pixel command
                 b"PX" => {
                     // Get and parse coordinates

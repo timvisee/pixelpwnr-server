@@ -32,6 +32,14 @@ const BUF_THRESHOLD: usize = 16_000;
 /// stuck as it can't find the end of a line within a full buffer.
 const LINE_MAX_LENGTH: usize = 1024;
 
+/// The prefix used for the Pixel Binary command
+pub const PXB_PREFIX: [u8; 2] = ['P' as u8, 'B' as u8];
+
+/// The size of a single Pixel Binary command.
+///
+///`                            Prefix             x   y   r   g   b   a`
+pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
+
 /// Line based codec.
 ///
 /// This decorates a socket and presents a line based read / write interface.
@@ -139,6 +147,7 @@ where
             _ => return Poll::Pending,
         };
 
+        // poll_read returns Ok(0) if the other end has hung up/EOF has been reached
         if amount == 0 {
             return Poll::Ready(Err(()));
         }
@@ -171,16 +180,17 @@ where
             }
         }
 
+        let rd_len = self.rd.len();
+
         // Make sure the buffer has enough data in it to be a valid command
-        if self.rd.as_ref().len() < 2 {
+        if rd_len < 2 {
             return Poll::Pending;
         }
 
-        if self.rd.len() > 4 && &self.rd[..4] == b"PXB " {
-            ///                         PXB x   y   r   g   b   a  \n
-            const PXB_CMD_SIZE: usize = 4 + 2 + 2 + 1 + 1 + 1 + 1 + 1;
-            if self.rd.len() >= PXB_CMD_SIZE {
-                let line = self.rd.split_to(PXB_CMD_SIZE);
+        if rd_len > PXB_PREFIX.len() && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX {
+            let len = PXB_CMD_SIZE.min(rd_len);
+            if len >= PXB_CMD_SIZE {
+                let line = self.rd.split_to(len);
                 return Poll::Ready(Some(line));
             } else {
                 return Poll::Ready(None);
