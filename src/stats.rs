@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use self::number_prefix::{NumberPrefix, Prefixed, Standalone};
+use serde::{Deserialize, Serialize};
 use serde_yaml;
 
 use crate::stat_monitor::StatMonitor;

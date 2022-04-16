@@ -1,11 +1,10 @@
-use std::io;
-use std::io::prelude::*;
 use std::sync::Arc;
+use std::task::Poll;
+use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
-use futures::prelude::*;
-use tokio::net::TcpStream;
-use tokio_io::AsyncRead;
+use futures::Stream;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::stats::Stats;
 
@@ -42,9 +41,12 @@ const LINE_MAX_LENGTH: usize = 1024;
 /// handle the encoding and decoding as well as reading from and writing to the
 /// socket.
 #[derive(Debug)]
-pub struct Lines {
+pub struct Lines<'a, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// The TCP socket.
-    socket: TcpStream,
+    socket: Pin<&'a mut T>,
 
     /// Buffer used when reading from the socket. Data is not returned from
     /// this buffer until an entire line has been read.
@@ -57,9 +59,12 @@ pub struct Lines {
     stats: Arc<Stats>,
 }
 
-impl Lines {
+impl<'a, T> Lines<'a, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: TcpStream, stats: Arc<Stats>) -> Self {
+    pub fn new(socket: Pin<&'a mut T>, stats: Arc<Stats>) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
@@ -80,7 +85,7 @@ impl Lines {
     }
 
     /// Flush the write buffer to the socket
-    pub fn poll_flush(&mut self) -> Poll<(), io::Error> {
+    pub fn poll_flush(self: &mut Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<()> {
         // As long as there is buffered data to write, try to write it.
         while !self.wr.is_empty() {
             // `try_nb` is kind of like `try_ready`, but for operations that
@@ -88,13 +93,20 @@ impl Lines {
             //
             // In the case of `io::Result`, an error of `WouldBlock` is
             // equivalent to `Async::NotReady.
-            let n = try_nb!(self.socket.write(&self.wr));
 
-            // This discards the first `n` bytes of the buffer.
-            let _ = self.wr.split_to(n);
+            let len = self.wr.len();
+            let bytes = self.wr.split_to(len);
+
+            let socket = self.socket.as_mut();
+
+            if let Poll::Ready(Ok(bytes)) = socket.poll_write(cx, &bytes) {
+                bytes
+            } else {
+                return Poll::Pending;
+            };
         }
 
-        Ok(Async::Ready(()))
+        Poll::Ready(())
     }
 
     /// Read data from the socket if the buffer isn't full enough,
@@ -104,42 +116,80 @@ impl Lines {
     /// in the buffer, memory is allocated to give the buffer enough capacity.
     /// The buffer is then filled with data from the socket with all the data
     /// that is available.
-    fn fill_read_buf(&mut self) -> Poll<(), io::Error> {
+    ///
+    /// Bool indicates whether or not an error occured
+    fn fill_read_buf(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Result<(), ()>> {
         // Get the length of buffer contents
         let len = self.rd.len();
 
         // We've enough data to continue
         if len > BUF_THRESHOLD {
-            return Ok(Async::Ready(()));
+            return Poll::Ready(Ok(()));
         }
 
-        // Allocate enough capacity to fill the buffer
-        self.rd.reserve(BUF_SIZE - len);
-
         // Read data and try to fill the buffer, update the statistics
-        let amount = try_ready!(self.socket.read_buf(&mut self.rd));
+        let mut local_buf: [MaybeUninit<u8>; BUF_SIZE] = [MaybeUninit::uninit(); BUF_SIZE];
+        let mut read_buf = tokio::io::ReadBuf::uninit(&mut local_buf[..BUF_SIZE - len]);
+
+        let amount = match self.socket.as_mut().poll_read(cx, &mut read_buf) {
+            Poll::Ready(Ok(_)) => read_buf.filled().len(),
+            _ => return Poll::Pending,
+        };
+
+        if amount == 0 {
+            return Poll::Ready(Err(()));
+        }
+
+        self.rd.extend_from_slice(read_buf.filled());
+
         self.stats.inc_bytes_read(amount);
 
         // We're done reading
-        return Ok(Async::Ready(()));
+        return Poll::Ready(Ok(()));
     }
 }
 
-impl Stream for Lines {
+impl<'a, T> Stream for Lines<'a, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     type Item = BytesMut;
-    type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         // First, read any new data into the read buffer
-        let closed = self.fill_read_buf()?.is_ready();
+        let fill_read_buf = self.as_mut().fill_read_buf(cx);
+
+        if let Poll::Ready(result) = fill_read_buf {
+            if result.is_err() {
+                return Poll::Ready(None);
+            }
+        }
 
         // Make sure the buffer has enough data in it to be a valid command
-        if self.rd.len() < 2 {
-            return Ok(Async::NotReady);
+        if self.rd.as_ref().len() < 2 {
+            return Poll::Pending;
+        }
+
+        if self.rd.len() > 4 && &self.rd[..4] == b"PXB " {
+            ///                         PXB x   y   r   g   b   a  \n
+            const PXB_CMD_SIZE: usize = 4 + 2 + 2 + 1 + 1 + 1 + 1 + 1;
+            if self.rd.len() >= PXB_CMD_SIZE {
+                let line = self.rd.split_to(PXB_CMD_SIZE);
+                return Poll::Ready(Some(line));
+            } else {
+                return Poll::Ready(None);
+            }
         }
 
         // Find the new line character
-        let pos = self.rd
+        let pos = self
+            .rd
             .iter()
             .take(LINE_MAX_LENGTH)
             .position(|b| *b == b'\n' || *b == b'\r');
@@ -151,9 +201,9 @@ impl Stream for Lines {
             match self.rd.get(pos + 1) {
                 Some(b) => match *b {
                     b'\n' | b'\r' => newlines = 2,
-                    _ => {},
+                    _ => {}
                 },
-                _ => {},
+                _ => {}
             }
 
             // Pull the line of the read buffer
@@ -161,14 +211,14 @@ impl Stream for Lines {
 
             // Skip empty lines
             if pos == 0 {
-                return self.poll();
+                return self.poll_next(cx);
             }
 
             // Drop trailing new line characters
-            line.split_off(pos);
+            line.truncate(pos);
 
             // Return the line
-            return Ok(Async::Ready(Some(line)));
+            return Poll::Ready(Some(line));
         }
 
         // If no line ending was found, and the buffer is larger than the
@@ -181,14 +231,14 @@ impl Stream for Lines {
             );
 
             // Break the connection, by ending the lines stream
-            return Ok(Async::Ready(None));
+            return Poll::Ready(None);
         }
 
         // We don't have new data, or close the connection
-        if closed {
-            return Ok(Async::Ready(None));
+        if fill_read_buf.is_ready() {
+            return Poll::Ready(None);
         } else {
-            return Ok(Async::NotReady);
+            return Poll::Pending;
         }
     }
 }

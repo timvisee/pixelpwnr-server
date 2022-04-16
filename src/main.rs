@@ -7,13 +7,9 @@ mod stat_monitor;
 mod stat_reporter;
 mod stats;
 
-use std::sync::Arc;
-use std::thread;
+use std::{pin::Pin, sync::Arc};
 
-use futures::future::Executor;
-use futures::prelude::*;
-use futures::sync::mpsc;
-use futures_cpupool::Builder;
+use futures::{channel::mpsc, StreamExt};
 use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -27,7 +23,8 @@ use stats::{Stats, StatsRaw};
 // TODO: use some constant for new lines
 
 /// Main application entrypoint.
-fn main() {
+#[tokio::main]
+async fn main() {
     // Parse CLI arguments
     let arg_handler = ArgHandler::parse();
 
@@ -49,24 +46,29 @@ fn main() {
     let pixmap_thread = pixmap.clone();
     let stats_thread = stats.clone();
     let host = arg_handler.host();
-    let server_thread = thread::spawn(move || {
-        let listener = TcpListener::bind(&host).expect("failed to bind");
+
+    let server_thread = tokio::spawn(async move {
+        let listener = TcpListener::bind(&host).await.expect("Bind error");
         println!("Listening on: {}", host);
 
         // Create a worker thread that assigns work to a futures threadpool
         let (tx, rx) = mpsc::unbounded();
         let pixmap_worker = pixmap_thread.clone();
         let stats_worker = stats_thread.clone();
-        thread::spawn(|| worker(rx, pixmap_worker, stats_worker));
+        tokio::spawn(async { worker(rx, pixmap_worker, stats_worker).await });
 
         // Infinitely accept sockets from our `TcpListener`.
         // Send work to the worker
-        let srv = listener.incoming().for_each(|socket| {
-            tx.unbounded_send(socket).expect("worker thread died");
-            Ok(())
-        });
 
-        srv.wait().unwrap();
+        loop {
+            let (socket, _) = if let Ok(res) = listener.accept().await {
+                res
+            } else {
+                println!("Failed to accept a connection");
+                continue;
+            };
+            tx.unbounded_send(socket).expect("worker thread died");
+        }
     });
 
     // Render the pixelflut screen
@@ -75,16 +77,16 @@ fn main() {
     } else {
         // Do not render, wait on the server thread instead
         println!("Not rendering canvas, disabled with the --no-render flag");
-        server_thread.join().unwrap();
+        server_thread.await.unwrap();
     }
 }
 
-fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
-    let pool = Builder::new()
-        .name_prefix(format!("{}-worker", APP_NAME))
-        .create();
-
-    let done = rx.for_each(move |socket| {
+async fn worker(
+    mut rx: mpsc::UnboundedReceiver<TcpStream>,
+    pixmap: Arc<Pixmap>,
+    stats: Arc<Stats>,
+) {
+    while let Some(mut socket) = rx.next().await {
         // A client connected, ensure we're able to get it's address
         let addr = socket.peer_addr().expect("failed to get remote address");
         println!("A client connected (from: {})", addr);
@@ -94,33 +96,28 @@ fn worker(rx: mpsc::UnboundedReceiver<TcpStream>, pixmap: Arc<Pixmap>, stats: Ar
 
         // Wrap the socket with the Lines codec,
         // to interact with lines instead of raw bytes
-        let lines = Lines::new(socket, stats.clone());
 
         // Define a client as connection
         let disconnect_stats = stats.clone();
-        let connection = Client::new(lines, pixmap.clone(), stats.clone())
-            .map_err(|e| {
-                // Handle connection errors, show an error message
-                println!("Client connection error: {:?}", e);
-            })
-            .then(move |_| -> Result<_, _> {
-                // Print a disconnect message
-                println!("A client disconnected (from: {})", addr);
 
-                // Decreasde the client connections number
-                disconnect_stats.dec_clients();
+        let pixmap = pixmap.clone();
+        let stats = stats.clone();
 
-                Ok(())
-            });
+        tokio::spawn(async move {
+            let socket = Pin::new(&mut socket);
 
-        // Add the connection future to the pool on this thread
-        pool.execute(connection).unwrap();
+            let mut lines = Lines::new(socket, stats.clone());
+            let lines = Pin::new(&mut lines);
+            let connection = Client::new(lines, pixmap, stats);
 
-        Ok(())
-    });
+            connection.await;
+            // Print a disconnect message
+            println!("A client disconnected (from: {})", addr);
 
-    // Handle all connection futures, and wait until we're done
-    done.wait().unwrap();
+            // Decreasde the client connections number
+            disconnect_stats.dec_clients();
+        });
+    }
 }
 
 /// Start the pixel map renderer.
