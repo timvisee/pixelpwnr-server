@@ -93,7 +93,8 @@ impl StatReporter {
                     let mut last = screen_last.lock().unwrap();
 
                     // Get the number of elapsed seconds since the last report
-                    let elapsed = last.map(|last| last.elapsed().ok())
+                    let elapsed = last
+                        .map(|last| last.elapsed().ok())
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
@@ -101,16 +102,14 @@ impl StatReporter {
                     if last.is_none() || elapsed >= interval {
                         if let Some(ref screen) = *screen {
                             Self::report_screen(&stats, screen);
-                            *last = Some(
-                                SystemTime::now(),
-                            );
+                            *last = Some(SystemTime::now());
                         }
                     }
 
                     // See how long we should take, update the next update time
                     next_update = min(
                         next_update,
-                        interval.checked_sub(elapsed).unwrap_or(interval)
+                        interval.checked_sub(elapsed).unwrap_or(interval),
                     );
                 }
 
@@ -120,22 +119,21 @@ impl StatReporter {
                     let mut last = stdout_last.lock().unwrap();
 
                     // Get the number of elapsed seconds since the last report
-                    let elapsed = last.map(|last| last.elapsed().ok())
+                    let elapsed = last
+                        .map(|last| last.elapsed().ok())
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
                     // Report stats to the stdout
                     if last.is_none() || elapsed >= interval {
                         Self::report_stdout(&stats);
-                        *last = Some(
-                            SystemTime::now(),
-                        );
+                        *last = Some(SystemTime::now());
                     }
 
                     // See how long we should take, update the next update time
                     next_update = min(
                         next_update,
-                        interval.checked_sub(elapsed).unwrap_or(interval)
+                        interval.checked_sub(elapsed).unwrap_or(interval),
                     );
                 }
 
@@ -145,7 +143,8 @@ impl StatReporter {
                     let mut last = save_last.lock().unwrap();
 
                     // Get the number of elapsed seconds since the last save
-                    let elapsed = last.map(|last| last.elapsed().ok())
+                    let elapsed = last
+                        .map(|last| last.elapsed().ok())
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
@@ -156,17 +155,17 @@ impl StatReporter {
                         let raw = stats.to_raw();
 
                         // Save the raw stats
-                        raw.save(save_path.as_ref().unwrap().as_path());
+                        if let Some(save_path) = &save_path {
+                            raw.save(save_path.as_path())
+                        }
 
-                        *last = Some(
-                            SystemTime::now(),
-                        );
+                        *last = Some(SystemTime::now());
                     }
 
                     // See how long we should take, update the next update time
                     next_update = min(
                         next_update,
-                        interval.checked_sub(elapsed).unwrap_or(interval)
+                        interval.checked_sub(elapsed).unwrap_or(interval),
                     );
                 }
 
