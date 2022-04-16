@@ -1,15 +1,13 @@
-extern crate time;
-
-use self::time::PreciseTime;
+use std::time::{Duration, Instant};
 
 /// The maximum number of frame times that is stored.
 const FRAME_BUFFER_MAX: usize = 512;
 
 /// The maximum time in milliseconds a frame time is remembered.
-const FRAME_TTL_MS: i64 = 5000;
+const FRAME_TTL: Duration = Duration::from_millis(5000);
 
 /// The interval in milliseconds to report the FPS count at to the console.
-const REPORT_INTERVAL_MS: i64 = 1000;
+const REPORT_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// The minimum number of frames to collect before the first report.
 const REPORT_FIRST_FRAMES_MIN: usize = 5;
@@ -26,10 +24,10 @@ const REPORT_FIRST_FRAMES_MIN: usize = 5;
 /// a frame.
 pub struct FpsCounter {
     /// A history of frame times, used to calculate the FPS.
-    frames: Vec<PreciseTime>,
+    frames: Vec<Instant>,
 
     /// The time the FPS was last reported at, none if not reported.
-    last_report: Option<PreciseTime>,
+    last_report: Option<Instant>,
 }
 
 impl FpsCounter {
@@ -49,7 +47,7 @@ impl FpsCounter {
         }
 
         // Add the current time to the list
-        self.frames.push(PreciseTime::now());
+        self.frames.push(Instant::now());
 
         // Periodically report the FPS
         self.report_periodically();
@@ -68,12 +66,11 @@ impl FpsCounter {
         }
 
         // Find the numbers of milliseconds passed since the first frame
-        let passed = self.frames[0].to(PreciseTime::now()).num_microseconds()?;
+
+        let passed = Instant::now().duration_since(self.frames[0]).as_micros();
 
         // Calculate the FPS
-        Some(
-            (self.frames.len() as f64) / ((passed as f64) / 1_000_000f64)
-        )
+        Some((self.frames.len() as f64) / ((passed as f64) / 1_000_000f64))
     }
 
     /// Report the FPS to the console periodically.
@@ -90,10 +87,10 @@ impl FpsCounter {
         // Check if the report time has passed
         if let Some(last_report) = self.last_report {
             // Calculate the passed time
-            let passed = last_report.to(PreciseTime::now()).num_milliseconds();
+            let passed = Instant::now().duration_since(last_report);
 
             // Make sure enough time has passed
-            if passed < REPORT_INTERVAL_MS {
+            if passed < REPORT_INTERVAL {
                 return;
             }
         }
@@ -110,7 +107,7 @@ impl FpsCounter {
             println!("FPS: {:.1}", fps);
 
             // Set the last report time
-            self.last_report = Some(PreciseTime::now());
+            self.last_report = Some(Instant::now());
         }
     }
 
@@ -125,12 +122,11 @@ impl FpsCounter {
         }
 
         // Find the number of outdated/dead frames
-        let now = PreciseTime::now();
-        let dead = self.frames
+        let now = Instant::now();
+        let dead = self
+            .frames
             .iter()
-            .take_while(
-                |frame| frame.to(now).num_milliseconds() > FRAME_TTL_MS
-            )
+            .take_while(|frame| now.duration_since(**frame) > FRAME_TTL)
             .count();
 
         // Remove the dead frames
