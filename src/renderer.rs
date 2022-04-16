@@ -1,34 +1,21 @@
-use gfx;
-use gfx::{Device, Factory};
 use gfx::handle::ShaderResourceView;
 use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
-use gfx_device_gl;
-use gfx_window_glutin as gfx_glutin;
-use glutin;
-use glutin::{
-    ContextBuilder,
-    EventsLoop,
-    GlContext,
-    GlProfile,
-    GlRequest,
-    KeyboardInput,
-    Robustness,
-    VirtualKeyCode,
-    WindowBuilder,
-};
 use glutin::Event::WindowEvent;
-use glutin::WindowEvent::{
-    Closed,
-    KeyboardInput as WindowKeyboardInput,
-    Resized,
+use glutin::WindowEvent::{Closed, KeyboardInput as WindowKeyboardInput, Resized};
+use glutin::{
+    ContextBuilder, EventsLoop, GlContext, GlProfile, GlRequest, KeyboardInput, Robustness,
+    VirtualKeyCode, WindowBuilder,
 };
 
-use fps_counter::FpsCounter;
-use pixmap::Pixmap;
-use primitive::create_quad_max;
-use stats_renderer::{Corner, StatsRenderer};
-use vertex::Vertex;
+use gfx::{self, *};
+use gfx_window_glutin as gfx_glutin;
+
+use crate::fps_counter::FpsCounter;
+use crate::pixmap::Pixmap;
+use crate::primitive::create_quad_max;
+use crate::stats_renderer::{Corner, StatsRenderer};
+use crate::vertex::Vertex;
 
 /// Define used types
 pub type ColorFormat = gfx::format::Rgba8;
@@ -53,7 +40,7 @@ pub struct Renderer<'a> {
     // The window title.
     title: &'a str,
 
-    // Pixel map holding the screen data. 
+    // Pixel map holding the screen data.
     pixmap: &'a Pixmap,
 
     // Used to render statistics on the canvas.
@@ -71,10 +58,7 @@ impl<'a> Renderer<'a> {
     ///
     /// The renderer window title should be given to `title`.
     /// The pixel map that is rendered should be given to `pixmap`.
-    pub fn new(
-        title: &'a str,
-        pixmap: &'a Pixmap,
-    ) -> Renderer<'a> {
+    pub fn new(title: &'a str, pixmap: &'a Pixmap) -> Renderer<'a> {
         // Construct and return the renderer
         Renderer {
             title,
@@ -121,29 +105,20 @@ impl<'a> Renderer<'a> {
             .with_vsync(true);
 
         // Initialize glutin
-        let (
-            window,
-            mut device,
-            mut factory,
-            mut main_color,
-            mut main_depth,
-        ) = gfx_glutin::init::<ColorFormat, DepthFormat>(
-            builder,
-            context,
-            &self.events_loop,
-        );
+        let (window, mut device, mut factory, mut main_color, mut main_depth) =
+            gfx_glutin::init::<ColorFormat, DepthFormat>(builder, context, &self.events_loop);
 
         // Create the command encoder
-        let mut encoder: gfx::Encoder<_, _> = factory
-            .create_command_buffer()
-            .into();
+        let mut encoder: gfx::Encoder<_, _> = factory.create_command_buffer().into();
 
         // Create a shader pipeline
-        let pso = factory.create_pipeline_simple(
-            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/screen.glslv")),
-            include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/screen.glslf")),
-            pipe::new(),
-        ).unwrap();
+        let pso = factory
+            .create_pipeline_simple(
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/screen.glslv")),
+                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/screen.glslf")),
+                pipe::new(),
+            )
+            .unwrap();
 
         // Create a full screen quad, plane, that is rendered on
         let plane = create_quad_max();
@@ -155,7 +130,7 @@ impl<'a> Renderer<'a> {
         // Create a base image
         let base_image = (
             Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
-            factory.create_sampler_linear()
+            factory.create_sampler_linear(),
         );
 
         // Build pipe data
@@ -173,16 +148,18 @@ impl<'a> Renderer<'a> {
         let mut dimentions = (size.0 as f32, size.1 as f32);
 
         // Build the stats renderer
-        self.stats.init(
-            factory.clone(),
-            dimentions,
-            main_color.clone(),
-            main_depth.clone(),
-            stats_size,
-            stats_offset,
-            stats_padding,
-            stats_col_spacing,
-        ).expect("failed to initialize stats text renderer");
+        self.stats
+            .init(
+                factory.clone(),
+                dimentions,
+                main_color.clone(),
+                main_depth.clone(),
+                stats_size,
+                stats_offset,
+                stats_padding,
+                stats_col_spacing,
+            )
+            .expect("failed to initialize stats text renderer");
 
         // Keep rendering until we're done
         while running {
@@ -213,27 +190,29 @@ impl<'a> Renderer<'a> {
                         event,
                     } => match event {
                         // Stop running when escape is pressed
-                        WindowKeyboardInput  {
+                        WindowKeyboardInput {
                             device_id: _,
-                            input: KeyboardInput {
-                                scancode: _,
-                                state: _,
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                modifiers: _,
-                            }
-                        } | Closed => running = false,
+                            input:
+                                KeyboardInput {
+                                    scancode: _,
+                                    state: _,
+                                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                                    modifiers: _,
+                                },
+                        }
+                        | Closed => running = false,
 
                         // Update the view when the window is resized
                         Resized(w, h) => {
                             dimentions = (w as f32, h as f32);
                             update = true;
                             update_views = true;
-                        },
+                        }
 
-                        _ => {},
+                        _ => {}
                     },
 
-                    _ => {},
+                    _ => {}
                 }
             });
 
@@ -281,18 +260,12 @@ impl<'a> Renderer<'a> {
     }
 
     /// Load a texture from the given `path`.
-    fn create_texture(
-        factory: &mut F,
-        data: &[u8],
-        kind: Kind,
-    ) -> ShaderResourceView<R, [f32; 4]> {
+    fn create_texture(factory: &mut F, data: &[u8], kind: Kind) -> ShaderResourceView<R, [f32; 4]> {
         // Create a GPU texture
         // TODO: make sure the mipmap state is correct
-        let (_, view) = factory.create_texture_immutable_u8::<ColorFormat>(
-            kind,
-            Mipmap::Provided,
-            &[data],
-        ).unwrap();
+        let (_, view) = factory
+            .create_texture_immutable_u8::<ColorFormat>(kind, Mipmap::Provided, &[data])
+            .unwrap();
 
         view
     }

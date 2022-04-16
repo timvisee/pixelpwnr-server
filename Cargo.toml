@@ -2,6 +2,7 @@
 name = "pixelpwnr-render"
 version = "0.1.0"
 authors = ["Tim Visée <timvisee@gmail.com>"]
+edition = "2021"
 
 [dependencies]
 image = "0.20"

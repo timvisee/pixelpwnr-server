@@ -4,23 +4,20 @@ use std::cmp::max;
 use std::iter::Extend;
 use std::sync::{Arc, Mutex};
 
-use gfx;
-use gfx::{CommandBuffer, Encoder, Factory, PipelineState, Slice};
 use gfx::format::RenderFormat;
 use gfx::handle::{DepthStencilView, RenderTargetView};
 use gfx::traits::FactoryExt;
+use gfx::{self, *};
+
+use self::gfx_text::{
+    Error as GfxTextError, HorizontalAnchor, Renderer as TextRenderer, VerticalAnchor,
+};
 use gfx_device_gl;
 use gfx_window_glutin as gfx_glutin;
 use glutin::GlWindow;
-use self::gfx_text::{
-    Error as GfxTextError,
-    HorizontalAnchor,
-    Renderer as TextRenderer,
-    VerticalAnchor,
-};
 
-use primitive::create_quad;
-use vertex::Vertex;
+use crate::primitive::create_quad;
+use crate::vertex::*;
 
 type ColorFormat = gfx::format::Rgba8;
 type DepthFormat = gfx::format::DepthStencil;
@@ -35,8 +32,8 @@ gfx_defines! {
         vbuf: gfx::VertexBuffer<Vertex> = (),
         out: gfx::BlendTarget<ColorFormat> = (
             "Target0",
-			gfx::state::ColorMask::all(),
-			gfx::state::Blend {
+            gfx::state::ColorMask::all(),
+            gfx::state::Blend {
                 color: gfx::state::BlendChannel {
                     equation: gfx::state::Equation::Add,
                     source: gfx::state::Factor::SourceAlphaSaturated,
@@ -49,7 +46,7 @@ gfx_defines! {
                     source: gfx::state::Factor::One,
                     destination: gfx::state::Factor::Zero,
                 },
-		    }
+            }
         ),
     }
 }
@@ -133,16 +130,24 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         self.renderer = Some(
             gfx_text::new(factory.clone())
                 .with_size(font_size)
-                .build()?
+                .build()?,
         );
 
         // Create a shader pipeline for the stats background
         self.bg_pso = Some(
-            factory.create_pipeline_simple(
-                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/stats_bg.glslv")),
-                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/stats_bg.glslf")),
-                bg_pipe::new(),
-            ).unwrap()
+            factory
+                .create_pipeline_simple(
+                    include_bytes!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/shaders/stats_bg.glslv"
+                    )),
+                    include_bytes!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/shaders/stats_bg.glslf"
+                    )),
+                    bg_pipe::new(),
+                )
+                .unwrap(),
         );
 
         // Create a background plane
@@ -151,12 +156,10 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
 
         // Store the slice, and build the background pipe data
         self.bg_slice = Some(slice);
-        self.bg_data = Some(
-            bg_pipe::Data {
-                vbuf: vertex_buffer,
-                out: main_color,
-            }
-        );
+        self.bg_data = Some(bg_pipe::Data {
+            vbuf: vertex_buffer,
+            out: main_color,
+        });
 
         // Set the factory and depth stencil
         self.factory = Some(factory);
@@ -172,10 +175,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
 
     /// Check whether any text is set to render.
     pub fn has_text(&self) -> bool {
-        self.text.lock()
-            .unwrap()
-            .trim()
-            .is_empty()
+        self.text.lock().unwrap().trim().is_empty()
     }
 
     /// Set the text that is rendered.
@@ -223,10 +223,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 let y = 1f32 - self.offset.1 as f32 / win.1 * 2f32 - h;
 
                 // Rebuild the vertex buffer and slice data
-                let (
-                    vertex_buffer,
-                    slice,
-                ) = create_quad((x, y), (w, h))
+                let (vertex_buffer, slice) = create_quad((x, y), (w, h))
                     .create_vertex_buffer(self.factory.as_mut().unwrap());
 
                 *self.bg_slice.as_mut().unwrap() = slice;
@@ -280,27 +277,26 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         text: Vec<Vec<&str>>,
     ) -> (f32, f32) {
         // Build a table of text bounds
-        let bounds: Vec<Vec<(i32, i32)>> = text.iter()
-            .map(|col| col.iter()
-                .map(|text| renderer.measure(text))
-                .collect()
-            ).collect();
+        let bounds: Vec<Vec<(i32, i32)>> = text
+            .iter()
+            .map(|col| col.iter().map(|text| renderer.measure(text)).collect())
+            .collect();
 
         // Find the maximum height for each row
-        let rows_max: Vec<i32> = bounds.iter()
-            .map(|col| col.iter()
-                 .map(|size| size.1)
-                 .max()
-                 .unwrap_or(0)
-            ).collect();
+        let rows_max: Vec<i32> = bounds
+            .iter()
+            .map(|col| col.iter().map(|size| size.1).max().unwrap_or(0))
+            .collect();
 
         // Find the maximum width for each column
-        let mut cols_max: Vec<i32> = bounds.iter()
+        let mut cols_max: Vec<i32> = bounds
+            .iter()
             .map(|row| row.iter().map(|size| size.0).collect())
             .fold(Vec::new(), |acc: Vec<i32>, row: Vec<i32>| {
                 // Iterate over widths in acc and row,
                 // select the largest one
-                let mut out: Vec<i32> = acc.iter()
+                let mut out: Vec<i32> = acc
+                    .iter()
                     .zip(row.iter())
                     .map(|(a, b)| max(*a, *b))
                     .collect();
@@ -314,7 +310,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
 
                 out
             });
-        cols_max.iter_mut()
+        cols_max
+            .iter_mut()
             .rev()
             .skip(1)
             .map(|width| *width += col_spacing)
@@ -337,32 +334,27 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
                 renderer.add_anchored(
                     text,
                     [x, y],
-                    HorizontalAnchor::Left, VerticalAnchor::Top,
+                    HorizontalAnchor::Left,
+                    VerticalAnchor::Top,
                     WHITE,
                 );
             }
         }
 
         // Find the total width and height, return it
-        (cols_max.iter().sum::<i32>() as f32 + padding as f32 * 2f32,
-            rows_max.iter().sum::<i32>() as f32 + padding as f32 * 2f32)
+        (
+            cols_max.iter().sum::<i32>() as f32 + padding as f32 * 2f32,
+            rows_max.iter().sum::<i32>() as f32 + padding as f32 * 2f32,
+        )
     }
 
     /// Update the stats rendering view, and the window dimentions.
     /// This should be called when the GL rendering window is resized.
     // TODO: also update the text view here
-    pub fn update_views(
-        &mut self,
-        window: &GlWindow,
-        dimentions: (f32, f32),
-    ) {
+    pub fn update_views(&mut self, window: &GlWindow, dimentions: (f32, f32)) {
         // Update the views
         if let Some(data) = self.bg_data.as_mut() {
-            gfx_glutin::update_views(
-                window,
-                &mut data.out,
-                self.bg_depth.as_mut().unwrap(),
-            )
+            gfx_glutin::update_views(window, &mut data.out, self.bg_depth.as_mut().unwrap())
         }
 
         // Update the window dimentions
@@ -382,5 +374,5 @@ pub enum Corner {
     BottomLeft,
 
     /// The bottom right corner of the screen.
-    BottomRight
+    BottomRight,
 }

@@ -25,9 +25,7 @@ impl Color {
     ///
     /// This color value defines the value of all 4 color channels.
     pub fn new(value: u32) -> Self {
-        Color {
-            value,
-        }
+        Color { value }
     }
 
     /// Construct a new color, from RGB values.
@@ -39,29 +37,27 @@ impl Color {
 
     /// Construct a new color, from RGBA values.
     pub fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Color::new(
-            r as u32 | (g as u32) << 8 | (b as u32) << 16 | (a as u32) << 24
-        )
+        Color::new(r as u32 | (g as u32) << 8 | (b as u32) << 16 | (a as u32) << 24)
     }
 
     /// Get the red value, in the range `[0, 255)`.
     pub fn red(&self) -> u8 {
-        (self.value & 0xFFFFFFFF) as u8
+        (self.value & 0xFF) as u8
     }
 
     /// Get green green value, in the range `[0, 255)`.
     pub fn green(&self) -> u8 {
-        (self.value & (0xFFFFFFFF << 8)) as u8
+        ((self.value & 0xFF00) >> 8) as u8
     }
 
     /// Get the blue value, in the range `[0, 255)`.
     pub fn blue(&self) -> u8 {
-        (self.value & (0xFFFFFFFF << 16)) as u8
+        ((self.value & 0xFF0000) >> 16) as u8
     }
 
     /// Get the alpha value, in the range `[0, 255)`.
     pub fn alpha(&self) -> u8 {
-        (self.value & (0xFFFFFFFF << 24)) as u8
+        ((self.value & 0xFF000000) >> 24) as u8
     }
 
     /// Construct a new color, from the given hexadecimal string.
@@ -73,11 +69,14 @@ impl Color {
 
         // Shift and add an alpha channel, if it wasn't set
         if value.len() <= 6 {
-            raw = 0xFF | (raw << 8);
+            raw = (raw << 8) | 0xFF;
         }
 
         // Construct and return the color
-        Ok(Color::new(raw.to_be()))
+
+        let color = Color::new(raw.to_be());
+
+        Ok(color)
     }
 
     /// Get the hexadecimal value of the color.
@@ -102,9 +101,22 @@ impl fmt::Debug for Color {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Only debug the alpha channel if it isn't the default value
         if self.alpha() == 0 {
-            write!(f, "ColorRGB({}, {}, {})", self.red(), self.green(), self.blue())
+            write!(
+                f,
+                "ColorRGB({}, {}, {})",
+                self.red(),
+                self.green(),
+                self.blue()
+            )
         } else {
-            write!(f, "ColorRGBA({}, {}, {}, {})", self.red(), self.green(), self.blue(), self.alpha())
+            write!(
+                f,
+                "ColorRGBA({}, {}, {}, {})",
+                self.red(),
+                self.green(),
+                self.blue(),
+                self.alpha()
+            )
         }
     }
 }

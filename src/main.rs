@@ -1,13 +1,3 @@
-#[macro_use]
-extern crate gfx;
-extern crate gfx_device_gl;
-extern crate gfx_text;
-extern crate gfx_window_glutin;
-extern crate glutin;
-extern crate image;
-#[macro_use]
-extern crate lazy_static;
-
 mod color;
 mod fps_counter;
 mod model;
@@ -17,9 +7,9 @@ mod renderer;
 mod stats_renderer;
 mod vertex;
 
-use color::Color;
-use pixmap::Pixmap;
-use renderer::Renderer;
+use crate::color::Color;
+use crate::pixmap::Pixmap;
+use crate::renderer::Renderer;
 
 pub fn main() {
     // Build a pixelmap
