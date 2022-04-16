@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, sleep};
 use std::time::{Duration, SystemTime};
 
-use stats::Stats;
+use crate::stats::Stats;
 
 /// A struct that is used to periodically report stats.
 pub struct StatReporter {
@@ -190,14 +190,21 @@ impl StatReporter {
 
     /// Report the stats to stdout.
     fn report_stdout(stats: &Arc<Stats>) {
-        println!("\
+        println!(
+            "\
                 {: <7} {: <15} {: <12}\n\
                 {: <7} {: <15} {: <12}\n\
                 {: <7} {: <15} {: <12}\
             ",
-            "STATS",   "Total:",                "Per sec:",
-            "Pixels:", stats.pixels_human(),     stats.pixels_sec_human(),
-            "Input:",  stats.bytes_read_human(), stats.bytes_read_sec_human(),
+            "STATS",
+            "Total:",
+            "Per sec:",
+            "Pixels:",
+            stats.pixels_human(),
+            stats.pixels_sec_human(),
+            "Input:",
+            stats.bytes_read_human(),
+            stats.bytes_read_sec_human(),
         );
     }
 }

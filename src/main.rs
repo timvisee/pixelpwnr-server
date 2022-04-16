@@ -1,19 +1,3 @@
-extern crate atoi;
-extern crate bufstream;
-extern crate bytes;
-extern crate clap;
-#[macro_use]
-extern crate futures;
-extern crate futures_cpupool;
-extern crate pixelpwnr_render;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_yaml;
-extern crate tokio;
-#[macro_use]
-extern crate tokio_io;
-
 mod app;
 mod arg_handler;
 mod client;

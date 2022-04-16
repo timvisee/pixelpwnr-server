@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use self::number_prefix::{NumberPrefix, Prefixed, Standalone};
 use serde_yaml;
 
-use stat_monitor::StatMonitor;
+use crate::stat_monitor::StatMonitor;
 
 /// A statistics manager, that keeps track of some statistics while the
 /// server is running.

@@ -2,6 +2,7 @@
 name = "pixelpwnr-server"
 version = "0.1.0"
 authors = ["timvisee <timvisee@gmail.com>"]
+edition = "2021"
 
 [dependencies]
 atoi = "0.3"

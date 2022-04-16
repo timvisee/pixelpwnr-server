@@ -7,7 +7,7 @@ use futures::prelude::*;
 use tokio::net::TcpStream;
 use tokio_io::AsyncRead;
 
-use stats::Stats;
+use crate::stats::Stats;
 
 /// The capacity of the read and write buffer in bytes.
 const BUF_SIZE: usize = 64_000;
