@@ -1,4 +1,3 @@
-mod app;
 mod arg_handler;
 mod client;
 mod cmd;
@@ -9,16 +8,17 @@ mod stats;
 
 use std::{pin::Pin, sync::Arc};
 
+use clap::StructOpt;
 use futures::{channel::mpsc, StreamExt};
 use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpListener, TcpStream};
 
-use app::APP_NAME;
-use arg_handler::ArgHandler;
 use client::Client;
 use codec::Lines;
 use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
+
+use crate::arg_handler::Opts;
 
 // TODO: use some constant for new lines
 
@@ -26,7 +26,7 @@ use stats::{Stats, StatsRaw};
 #[tokio::main]
 async fn main() {
     // Parse CLI arguments
-    let arg_handler = ArgHandler::parse();
+    let arg_handler = Opts::parse();
 
     // Build the pixelmap size
     let size = arg_handler.size();
@@ -35,7 +35,7 @@ async fn main() {
 
     // Build a stats manager, load persistent stats
     let mut stats = Stats::new();
-    if let Some(path) = arg_handler.stats_file() {
+    if let Some(path) = arg_handler.stats_file.clone() {
         if let Some(raw) = StatsRaw::load(path.as_path()) {
             stats.from_raw(&raw);
         }
@@ -45,7 +45,7 @@ async fn main() {
     // Start a server listener in a new thread
     let pixmap_thread = pixmap.clone();
     let stats_thread = stats.clone();
-    let host = arg_handler.host();
+    let host = arg_handler.host;
 
     let server_thread = tokio::spawn(async move {
         let listener = TcpListener::bind(&host).await.expect("Bind error");
@@ -72,7 +72,7 @@ async fn main() {
     });
 
     // Render the pixelflut screen
-    if !arg_handler.no_render() {
+    if !arg_handler.no_render {
         render(&arg_handler, &pixmap, stats);
     } else {
         // Do not render, wait on the server thread instead
@@ -121,9 +121,9 @@ async fn worker(
 }
 
 /// Start the pixel map renderer.
-fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
+fn render(arg_handler: &Opts, pixmap: &Pixmap, stats: Arc<Stats>) {
     // Build the renderer
-    let mut renderer = Renderer::new(APP_NAME, pixmap);
+    let mut renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
 
     // Borrow the statistics text
     let stats_text = renderer.stats().text();
@@ -133,7 +133,7 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
         arg_handler.stats_screen_interval(),
         arg_handler.stats_stdout_interval(),
         arg_handler.stats_save_interval(),
-        arg_handler.stats_file(),
+        arg_handler.stats_file.clone(),
         stats,
         Some(stats_text),
     );
@@ -141,10 +141,10 @@ fn render(arg_handler: &ArgHandler, pixmap: &Pixmap, stats: Arc<Stats>) {
 
     // Render the canvas
     renderer.run(
-        arg_handler.fullscreen(),
-        arg_handler.stats_font_size(),
+        arg_handler.fullscreen,
+        arg_handler.stats_font_size,
         arg_handler.stats_offset(),
-        arg_handler.stats_padding(),
-        arg_handler.stats_column_spacing(),
+        arg_handler.stats_padding,
+        arg_handler.stats_col_spacing,
     );
 }

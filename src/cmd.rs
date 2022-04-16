@@ -2,7 +2,6 @@ use atoi::atoi;
 use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
-use crate::app::{APP_NAME, APP_VERSION};
 use crate::stats::Stats;
 
 /// A set of pixel commands a client might send.
@@ -162,7 +161,8 @@ impl Cmd {
             HELP - HELP         >>  HELP ...\r\n\
             HELP - QUIT\
         ",
-            APP_NAME, APP_VERSION
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
         )
     }
 }
