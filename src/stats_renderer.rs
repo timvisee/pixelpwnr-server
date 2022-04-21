@@ -1,8 +1,9 @@
 extern crate gfx_text;
 
+use parking_lot::Mutex;
 use std::cmp::max;
 use std::iter::Extend;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gfx::format::RenderFormat;
 use gfx::handle::{DepthStencilView, RenderTargetView};
@@ -175,12 +176,12 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
 
     /// Check whether any text is set to render.
     pub fn has_text(&self) -> bool {
-        self.text.lock().unwrap().trim().is_empty()
+        self.text.lock().trim().is_empty()
     }
 
     /// Set the text that is rendered.
     pub fn set_text(&self, text: String) {
-        *self.text.lock().unwrap() = text;
+        *self.text.lock() = text;
     }
 
     /// Draw the renderer to the given context.
@@ -207,7 +208,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
             self.padding,
             self.col_spacing,
             renderer,
-            &self.text.lock().unwrap(),
+            &self.text.lock(),
         );
 
         // Draw the background quad, if there are some bounds
