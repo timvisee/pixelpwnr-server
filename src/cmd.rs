@@ -80,10 +80,9 @@ impl Cmd {
                     // command
                     match input.next() {
                         // Color part found, set the pixel command
-                        // TODO: don't convert to a string here
                         Some(color) => {
-                            let color = Color::from_hex(&String::from_utf8_lossy(color))
-                                .map_err(|_| "invalid color value")?;
+                            let color =
+                                Color::from_hex_raw(&color).map_err(|_| "invalid color value")?;
                             Ok(Cmd::SetPixel(x, y, color))
                         }
 
