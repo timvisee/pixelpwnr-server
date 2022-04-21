@@ -4,6 +4,15 @@ use std::num::ParseIntError;
 /// The default alpha channel value, if not specified. (0xFF = opaque)
 const DEFAULT_ALPHA: u8 = 0xFF;
 
+#[derive(Debug, Clone, Copy)]
+pub enum ParseColorError {
+    /// 6 or 8 characters are required
+    /// Value is the actual amount
+    InvalidCharCount(usize),
+    /// An invalid character was encountered
+    InvalidChar(u8),
+}
+
 /// Struct representing a color value.
 ///
 /// This color uses 4 channels, for red, green, blue and alpha.
@@ -13,6 +22,7 @@ const DEFAULT_ALPHA: u8 = 0xFF;
 /// value, which is aligned to 4 bytes in memory. This allows atomic use when
 /// directly writing the value in most cases (but not all!).
 #[repr(align(4))]
+#[derive(PartialEq)]
 pub struct Color {
     /// Defines the color with a byte for each of the 4 color channels.
     ///
@@ -79,6 +89,52 @@ impl Color {
         Ok(color)
     }
 
+    /// Construct a new color, from the given slice.
+    /// The slice should represent hexadecimal characters as ASCII characters,
+    /// meaning that they should be between b'0' and b'9', between b'a' and b'f', or
+    /// between b'A' and b'F'
+    pub fn from_hex_raw(value: &[u8]) -> Result<Self, ParseColorError> {
+        let len = value.len();
+
+        /// This always returns a value 0 <= v <= 15
+        fn parse_char(input: u8) -> Result<u8, ParseColorError> {
+            if input >= b'a' && input <= b'f' {
+                Ok(input - b'a' + 10)
+            } else if input >= b'A' && input <= b'F' {
+                Ok(input - b'A' + 10)
+            } else if input >= b'0' && input <= b'9' {
+                Ok(input - b'0')
+            } else {
+                Err(ParseColorError::InvalidChar(input))
+            }
+        }
+
+        let build = || {
+            let mut raw_u32 = 0u32;
+            for char in value.iter() {
+                raw_u32 <<= 4;
+                raw_u32 |= parse_char(*char)? as u32;
+            }
+            Ok(raw_u32)
+        };
+
+        if len == 6 {
+            let mut value = build()?;
+            // No Alpha byte
+            value = (value << 8) | 0xFF;
+            Ok(Color {
+                value: value.to_be(),
+            })
+        } else if len == 8 {
+            let value = build()?;
+            Ok(Color {
+                value: value.to_be(),
+            })
+        } else {
+            Err(ParseColorError::InvalidCharCount(len))
+        }
+    }
+
     /// Get the hexadecimal value of the color.
     #[allow(dead_code)]
     pub fn hex(&self) -> String {
@@ -119,4 +175,21 @@ impl fmt::Debug for Color {
             )
         }
     }
+}
+
+#[test]
+fn from_hex_raw() {
+    macro_rules! test {
+        ($in: literal, $out: expr, $print: literal) => {
+            let color_raw = Color::from_hex_raw($in.as_bytes()).unwrap();
+            let color = Color::from_hex($in).unwrap();
+            assert_eq!(color, color_raw);
+            assert_eq!(Color::new($out), color_raw);
+            assert_eq!(format!("{:?}", color_raw), $print);
+        };
+    }
+
+    test!("ABCDEFBA", 0xBAEFCDAB, "ColorRGBA(AB, CD, EF, BA)");
+    test!("AABBCC", 0xFFCCBBAA, "ColorRGBA(AA, BB, CC, FF)");
+    test!("ABCDEF00", 0x00EFCDAB, "ColorRGB(AB, CD, EF)");
 }
