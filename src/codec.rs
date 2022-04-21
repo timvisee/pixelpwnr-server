@@ -37,7 +37,7 @@ pub const PXB_PREFIX: [u8; 2] = ['P' as u8, 'B' as u8];
 
 /// The size of a single Pixel Binary command.
 ///
-///`                            Prefix             x   y   r   g   b   a`
+///`                            Prefix             x   y   r   g   b   a
 pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
 
 /// Line based codec.
@@ -144,6 +144,7 @@ where
 
         let amount = match self.socket.as_mut().poll_read(cx, &mut read_buf) {
             Poll::Ready(Ok(_)) => read_buf.filled().len(),
+            Poll::Ready(Err(_)) => return Poll::Ready(Err(())),
             _ => return Poll::Pending,
         };
 
@@ -171,84 +172,81 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // First, read any new data into the read buffer
-        let fill_read_buf = self.as_mut().fill_read_buf(cx);
-
-        if let Poll::Ready(result) = fill_read_buf {
-            if result.is_err() {
-                return Poll::Ready(None);
-            }
-        }
-
         let rd_len = self.rd.len();
 
-        // Make sure the buffer has enough data in it to be a valid command
-        if rd_len < 2 {
-            return Poll::Pending;
-        }
+        let is_binary_command =
+            rd_len >= PXB_PREFIX.len() && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
 
-        if rd_len > PXB_PREFIX.len() && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX {
-            let len = PXB_CMD_SIZE.min(rd_len);
-            if len >= PXB_CMD_SIZE {
-                let line = self.rd.split_to(len);
+        // See if it's the specialized binary command
+        if is_binary_command && rd_len >= PXB_CMD_SIZE {
+            let line = self.rd.split_to(PXB_CMD_SIZE);
+            return Poll::Ready(Some(line));
+        } else if !is_binary_command {
+            // Find the new line character
+            let pos = self
+                .rd
+                .iter()
+                .take(LINE_MAX_LENGTH)
+                .position(|b| *b == b'\n' || *b == b'\r');
+
+            // Get the line, return it
+            if let Some(pos) = pos {
+                // Find how many line ending chars this line ends with
+                let mut newlines = 1;
+                match self.rd.get(pos + 1) {
+                    Some(b) => match *b {
+                        b'\n' | b'\r' => newlines = 2,
+                        _ => {}
+                    },
+                    _ => {}
+                }
+
+                // Pull the line of the read buffer
+                let mut line = self.rd.split_to(pos + newlines);
+
+                // Drop trailing new line characters
+                line.truncate(pos);
+
+                // Return the line
                 return Poll::Ready(Some(line));
-            } else {
+            } else if rd_len > LINE_MAX_LENGTH {
+                // If no line ending was found, and the buffer is larger than the
+                // maximum command length, disconnect
+
+                // TODO: report this error to the client
+                println!(
+                    "Client sent a line longer than {} characters, disconnecting",
+                    LINE_MAX_LENGTH,
+                );
+
+                // Break the connection, by ending the lines stream
                 return Poll::Ready(None);
             }
         }
 
-        // Find the new line character
-        let pos = self
-            .rd
-            .iter()
-            .take(LINE_MAX_LENGTH)
-            .position(|b| *b == b'\n' || *b == b'\r');
+        // No command (or error) was found, try to fill the read buffer
+        // Then, try to read any new data into the read buffer
+        let fill_read_buf = self.as_mut().fill_read_buf(cx);
+        let new_rd_len = self.rd.len();
 
-        // Get the line, return it
-        if let Some(pos) = pos {
-            // Find how many line ending chars this line ends with
-            let mut newlines = 1;
-            match self.rd.get(pos + 1) {
-                Some(b) => match *b {
-                    b'\n' | b'\r' => newlines = 2,
-                    _ => {}
-                },
-                _ => {}
+        return match fill_read_buf {
+            // An error occured (most likely disconnection)
+            Poll::Ready(Err(_)) => Poll::Ready(None),
+            Poll::Ready(Ok(_)) => {
+                // Make sure the buffer has enough data in it to be a valid command
+                if new_rd_len < 2 {
+                    Poll::Pending
+                } else {
+                    // We managed to read enough new data, ship it!
+                    //
+                    // Note: the fact that this recurses could be some sort of
+                    // DoS vector, if a client can force the server into infinite
+                    // recursion by sending data that doesn't result in a new line being read
+                    // nor a binary command being read
+                    self.poll_next(cx)
+                }
             }
-
-            // Pull the line of the read buffer
-            let mut line = self.rd.split_to(pos + newlines);
-
-            // Skip empty lines
-            if pos == 0 {
-                return self.poll_next(cx);
-            }
-
-            // Drop trailing new line characters
-            line.truncate(pos);
-
-            // Return the line
-            return Poll::Ready(Some(line));
-        }
-
-        // If no line ending was found, and the buffer is larger than the
-        // maximum command length, disconnect
-        if self.rd.len() > LINE_MAX_LENGTH {
-            // TODO: report this error to the client
-            println!(
-                "Client sent a line longer than {} characters, disconnecting",
-                LINE_MAX_LENGTH,
-            );
-
-            // Break the connection, by ending the lines stream
-            return Poll::Ready(None);
-        }
-
-        // We don't have new data, or close the connection
-        if fill_read_buf.is_ready() {
-            return Poll::Ready(None);
-        } else {
-            return Poll::Pending;
-        }
+            Poll::Pending => Poll::Pending,
+        };
     }
 }

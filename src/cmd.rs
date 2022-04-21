@@ -96,7 +96,7 @@ impl Cmd {
                 b"SIZE" => Ok(Cmd::Size),
                 b"HELP" => Ok(Cmd::Help),
                 b"QUIT" => Ok(Cmd::Quit),
-
+                b"" => Ok(Cmd::None),
                 // Unknown command
                 _ => Err("unknown command, use HELP"),
             },
