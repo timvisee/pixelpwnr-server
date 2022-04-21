@@ -1,10 +1,10 @@
 extern crate number_prefix;
 
+use parking_lot::Mutex;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
 
 use self::number_prefix::{NumberPrefix, Prefixed, Standalone};
 use serde::{Deserialize, Serialize};
@@ -84,7 +84,7 @@ impl Stats {
     /// reliably, `None` is returned.
     pub fn pixels_sec(&self) -> Option<f64> {
         // Get a lock on the value monitor, update and retrieve the result
-        self.pixels_monitor.lock().ok()?.update(self.pixels())
+        self.pixels_monitor.lock().update(self.pixels())
     }
 
     /// Get the total number of pixels that have been written to the screen
@@ -161,10 +161,7 @@ impl Stats {
     /// reliably, `None` is returned.
     pub fn bytes_read_sec(&self) -> Option<f64> {
         // Get a lock on the value monitor, update and retrieve the result
-        self.bytes_read_monitor
-            .lock()
-            .ok()?
-            .update(self.bytes_read())
+        self.bytes_read_monitor.lock().update(self.bytes_read())
     }
 
     /// Get the total number of bytes that have been read from clients in the
@@ -210,8 +207,8 @@ impl Stats {
         self.bytes_read.store(raw.bytes_read, Ordering::SeqCst);
 
         // Reset the monitors
-        self.pixels_monitor.lock().unwrap().reset();
-        self.bytes_read_monitor.lock().unwrap().reset();
+        self.pixels_monitor.lock().reset();
+        self.bytes_read_monitor.lock().reset();
     }
 
     /// Convert this data in a raw stats object.

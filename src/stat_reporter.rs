@@ -1,6 +1,7 @@
+use parking_lot::Mutex;
 use std::cmp::min;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::{self, sleep};
 use std::time::{Duration, SystemTime};
 
@@ -90,7 +91,7 @@ impl StatReporter {
                 // Check the screen update time
                 if let Some(interval) = screen_interval {
                     // Get the last screen time
-                    let mut last = screen_last.lock().unwrap();
+                    let mut last = screen_last.lock();
 
                     // Get the number of elapsed seconds since the last report
                     let elapsed = last
@@ -116,7 +117,7 @@ impl StatReporter {
                 // Check the stdout update time
                 if let Some(interval) = stdout_interval {
                     // Get the last stdout time
-                    let mut last = stdout_last.lock().unwrap();
+                    let mut last = stdout_last.lock();
 
                     // Get the number of elapsed seconds since the last report
                     let elapsed = last
@@ -140,7 +141,7 @@ impl StatReporter {
                 // Check the stats save update time
                 if let Some(interval) = save_interval {
                     // Get the last save time
-                    let mut last = save_last.lock().unwrap();
+                    let mut last = save_last.lock();
 
                     // Get the number of elapsed seconds since the last save
                     let elapsed = last
@@ -177,7 +178,7 @@ impl StatReporter {
 
     /// Report the stats to the screen.
     fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>) {
-        *screen.lock().unwrap() = format!(
+        *screen.lock() = format!(
             "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet localhost 1234        \tin:\t{}\t{}",
             stats.pixels_human(),
             stats.pixels_sec_human(),
