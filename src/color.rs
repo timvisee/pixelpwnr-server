@@ -103,7 +103,7 @@ impl fmt::Debug for Color {
         if self.alpha() == 0 {
             write!(
                 f,
-                "ColorRGB({}, {}, {})",
+                "ColorRGB({:X}, {:X}, {:X})",
                 self.red(),
                 self.green(),
                 self.blue()
@@ -111,7 +111,7 @@ impl fmt::Debug for Color {
         } else {
             write!(
                 f,
-                "ColorRGBA({}, {}, {}, {})",
+                "ColorRGBA({:X}, {:X}, {:X}, {:X})",
                 self.red(),
                 self.green(),
                 self.blue(),
