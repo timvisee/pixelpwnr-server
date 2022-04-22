@@ -102,61 +102,64 @@ where
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<String> {
         // Read new lines from the socket
         while let Poll::Ready(line) = self.lines.as_mut().poll_next(cx) {
-            if let Some(message) = line {
+            if let Some(messages) = line {
                 // Get the input we're working with
-                let input = message.freeze();
 
-                // Decode the command to run
-                let cmd = match Cmd::decode(input) {
-                    Err(err) => {
-                        // Report the error to the client
-                        self.respond_str(cx, format!("ERR {}", err))
-                            .expect("failed to flush write buffer");
+                for message in messages.into_iter() {
+                    let input = message.freeze();
 
-                        return Poll::Ready("Command decoding failed".to_string());
+                    // Decode the command to run
+                    let cmd = match Cmd::decode(input) {
+                        Err(err) => {
+                            // Report the error to the client
+                            self.respond_str(cx, format!("ERR {}", err))
+                                .expect("failed to flush write buffer");
+
+                            return Poll::Ready("Command decoding failed".to_string());
+                        }
+                        Ok(cmd) => cmd,
+                    };
+
+                    // Invoke the command, and catch the result
+                    let result = cmd.invoke(&self.pixmap, &self.stats);
+
+                    // Do something with the result
+                    match result {
+                        // Do nothing
+                        CmdResult::Ok => {}
+
+                        // Respond to the client
+                        CmdResult::Response(msg) => {
+                            // Create a bytes buffer with the message
+                            let mut bytes = BytesMut::with_capacity(msg.len());
+                            bytes.put_slice(msg.as_bytes());
+
+                            // Respond
+                            self.respond(cx, &bytes)
+                                .expect("failed to flush write buffer");
+                        }
+
+                        // Report the error to the user
+                        CmdResult::ClientErr(err) => {
+                            // Report the error to the client
+                            self.respond_str(cx, format!("ERR {}", err))
+                                .expect("failed to flush write buffer");
+
+                            return Poll::Ready(format!("Client error: {}", err));
+                        }
+
+                        // Report the error to the server
+                        CmdResult::ServerErr(err) => {
+                            // Show an error message in the console
+                            println!("Client error \"{}\" occurred, disconnecting...", err);
+
+                            // Disconnect the client
+                            return Poll::Ready(format!("Server error occured. {}", err));
+                        }
+
+                        // Quit the connection
+                        CmdResult::Quit => return Poll::Ready("Client quit".to_string()),
                     }
-                    Ok(cmd) => cmd,
-                };
-
-                // Invoke the command, and catch the result
-                let result = cmd.invoke(&self.pixmap, &self.stats);
-
-                // Do something with the result
-                match result {
-                    // Do nothing
-                    CmdResult::Ok => {}
-
-                    // Respond to the client
-                    CmdResult::Response(msg) => {
-                        // Create a bytes buffer with the message
-                        let mut bytes = BytesMut::with_capacity(msg.len());
-                        bytes.put_slice(msg.as_bytes());
-
-                        // Respond
-                        self.respond(cx, &bytes)
-                            .expect("failed to flush write buffer");
-                    }
-
-                    // Report the error to the user
-                    CmdResult::ClientErr(err) => {
-                        // Report the error to the client
-                        self.respond_str(cx, format!("ERR {}", err))
-                            .expect("failed to flush write buffer");
-
-                        return Poll::Ready(format!("Client error: {}", err));
-                    }
-
-                    // Report the error to the server
-                    CmdResult::ServerErr(err) => {
-                        // Show an error message in the console
-                        println!("Client error \"{}\" occurred, disconnecting...", err);
-
-                        // Disconnect the client
-                        return Poll::Ready(format!("Server error occured. {}", err));
-                    }
-
-                    // Quit the connection
-                    CmdResult::Quit => return Poll::Ready("Client quit".to_string()),
                 }
             } else {
                 // EOF was reached. The remote client has disconnected. There is

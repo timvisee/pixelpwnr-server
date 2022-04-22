@@ -166,88 +166,91 @@ impl<'a, T> Stream for Lines<'a, T>
 where
     T: AsyncRead + AsyncWrite,
 {
-    type Item = BytesMut;
+    type Item = Vec<BytesMut>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let rd_len = self.rd.len();
-
-        let is_binary_command = cfg!(feature = "binary-pixel-cmd")
-            && rd_len >= PXB_PREFIX.len()
-            && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
-
-        // See if it's the specialized binary command
-        if is_binary_command && rd_len >= PXB_CMD_SIZE {
-            let line = self.rd.split_to(PXB_CMD_SIZE);
-            return Poll::Ready(Some(line));
-        } else if !is_binary_command {
-            // Find the new line character
-            let pos = self
-                .rd
-                .iter()
-                .take(LINE_MAX_LENGTH)
-                .position(|b| *b == b'\n' || *b == b'\r');
-
-            // Get the line, return it
-            if let Some(pos) = pos {
-                // Find how many line ending chars this line ends with
-                let mut newlines = 1;
-                match self.rd.get(pos + 1) {
-                    Some(b) => match *b {
-                        b'\n' | b'\r' => newlines = 2,
-                        _ => {}
-                    },
-                    _ => {}
-                }
-
-                // Pull the line of the read buffer
-                let mut line = self.rd.split_to(pos + newlines);
-
-                // Drop trailing new line characters
-                line.truncate(pos);
-
-                // Return the line
-                return Poll::Ready(Some(line));
-            } else if rd_len > LINE_MAX_LENGTH {
-                // If no line ending was found, and the buffer is larger than the
-                // maximum command length, disconnect
-
-                // TODO: report this error to the client
-                println!(
-                    "Client sent a line longer than {} characters, disconnecting",
-                    LINE_MAX_LENGTH,
-                );
-
-                // Break the connection, by ending the lines stream
-                return Poll::Ready(None);
-            }
-        }
+        let mut lines = Vec::with_capacity(self.rd.len() / 8);
 
         // No command (or error) was found, try to fill the read buffer
         // Then, try to read any new data into the read buffer
         let fill_read_buf = self.as_mut().fill_read_buf(cx);
         let new_rd_len = self.rd.len();
 
-        return match fill_read_buf {
+        match fill_read_buf {
             // An error occured (most likely disconnection)
-            Poll::Ready(Err(_)) => Poll::Ready(None),
+            Poll::Ready(Err(_)) => return Poll::Ready(None),
             Poll::Ready(Ok(_)) => {
                 // Make sure the buffer has enough data in it to be a valid command
                 if new_rd_len < 2 {
-                    Poll::Pending
-                } else {
-                    // We managed to read enough new data, ship it!
-                    //
-                    // Note: the fact that this recurses could be some sort of
-                    // DoS vector, if a client can force the server into infinite
-                    // recursion by sending data that doesn't result in a new line being read
-                    // nor a binary command being read
-                    self.poll_next(cx)
+                    return Poll::Pending;
                 }
             }
-            Poll::Pending => Poll::Pending,
-        };
+            Poll::Pending => return Poll::Pending,
+        }
+
+        loop {
+            let rd_len = self.rd.len();
+
+            let is_binary_command = cfg!(feature = "binary-pixel-cmd")
+                && rd_len >= PXB_PREFIX.len()
+                && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
+
+            // See if it's the specialized binary command
+            if is_binary_command && rd_len >= PXB_CMD_SIZE {
+                let line = self.rd.split_to(PXB_CMD_SIZE);
+                lines.push(line);
+            } else if !is_binary_command {
+                // Find the new line character
+                let pos = self
+                    .rd
+                    .iter()
+                    .take(LINE_MAX_LENGTH)
+                    .position(|b| *b == b'\n' || *b == b'\r');
+
+                // Get the line, return it
+                if let Some(pos) = pos {
+                    // Find how many line ending chars this line ends with
+                    let mut newlines = 1;
+                    match self.rd.get(pos + 1) {
+                        Some(b) => match *b {
+                            b'\n' | b'\r' => newlines = 2,
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+
+                    // Pull the line of the read buffer
+                    let mut line = self.rd.split_to(pos + newlines);
+
+                    // Drop trailing new line characters
+                    line.truncate(pos);
+
+                    // Return the line
+                    lines.push(line)
+                } else if rd_len > LINE_MAX_LENGTH {
+                    // If no line ending was found, and the buffer is larger than the
+                    // maximum command length, disconnect
+
+                    // TODO: report this error to the client
+                    println!(
+                        "Client sent a line longer than {} characters, disconnecting",
+                        LINE_MAX_LENGTH,
+                    );
+
+                    // Break the connection, by ending the lines stream
+                    return Poll::Ready(None);
+                } else {
+                    // Didn't find any more data to process
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Poll::Ready(Some(lines))
     }
 }
