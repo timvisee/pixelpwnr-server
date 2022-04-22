@@ -174,8 +174,9 @@ where
     ) -> Poll<Option<Self::Item>> {
         let rd_len = self.rd.len();
 
-        let is_binary_command =
-            rd_len >= PXB_PREFIX.len() && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
+        let is_binary_command = cfg!(feature = "binary-pixel-cmd")
+            && rd_len >= PXB_PREFIX.len()
+            && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
 
         // See if it's the specialized binary command
         if is_binary_command && rd_len >= PXB_CMD_SIZE {

@@ -46,7 +46,10 @@ impl Cmd {
             .filter(|part| !part.is_empty());
 
         // Binary pixel command short-circuit
-        if input_bytes.len() == PXB_CMD_SIZE && input_bytes[..PXB_PREFIX.len()] == PXB_PREFIX {
+        if cfg!(feature = "binary-pixel-cmd")
+            && input_bytes.len() == PXB_CMD_SIZE
+            && input_bytes[..PXB_PREFIX.len()] == PXB_PREFIX
+        {
             const OFF: usize = PXB_PREFIX.len();
             let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
             let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
@@ -157,7 +160,7 @@ impl Cmd {
 
     /// Get a list of command help, to respond to a client.
     pub fn help_list() -> String {
-        format!(
+        let mut help = format!(
             "\
             HELP {} v{}\r\n\
             HELP Commands:\r\n\
@@ -169,7 +172,13 @@ impl Cmd {
         ",
             env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")
-        )
+        );
+
+        if cfg!(feature = "binary-pixel-cmd") {
+            help.push_str("\r\nHELP - PBxyrgba (NO newline, x, y = 2 byte LE u16, r, g, b, a = single byte)");
+        }
+
+        help
     }
 }
 
