@@ -13,7 +13,6 @@ use gfx::{self, *};
 use self::gfx_text::{
     Error as GfxTextError, HorizontalAnchor, Renderer as TextRenderer, VerticalAnchor,
 };
-use gfx_device_gl;
 use gfx_window_glutin as gfx_glutin;
 use glutin::GlWindow;
 
@@ -24,7 +23,7 @@ use crate::vertex::*;
 /// White color definition with 4 channels.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-/// Screen shader data pipeline
+// Screen shader data pipeline
 gfx_defines! {
     pipeline bg_pipe {
         vbuf: gfx::VertexBuffer<Vertex> = (),

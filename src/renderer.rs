@@ -26,7 +26,7 @@ pub(crate) type R = gfx_device_gl::Resources;
 /// Black color definition with 4 channels.
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
-/// Screen shader data pipeline
+// Screen shader data pipeline
 gfx_defines! {
     pipeline pipe {
         vbuf: gfx::VertexBuffer<Vertex> = (),
