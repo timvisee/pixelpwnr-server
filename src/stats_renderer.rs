@@ -18,11 +18,8 @@ use gfx_window_glutin as gfx_glutin;
 use glutin::GlWindow;
 
 use crate::primitive::create_quad;
+use crate::renderer::{DepthFormat, R, ColorFormat};
 use crate::vertex::*;
-
-type ColorFormat = gfx::format::Rgba8;
-type DepthFormat = gfx::format::DepthStencil;
-type R = gfx_device_gl::Resources;
 
 /// White color definition with 4 channels.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];

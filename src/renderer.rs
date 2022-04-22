@@ -18,10 +18,10 @@ use crate::stats_renderer::{Corner, StatsRenderer};
 use crate::vertex::Vertex;
 
 /// Define used types
-pub type ColorFormat = gfx::format::Rgba8;
-pub type DepthFormat = gfx::format::DepthStencil;
+pub(crate) type ColorFormat = gfx::format::Rgba8;
+pub(crate) type DepthFormat = gfx::format::DepthStencil;
 type F = gfx_device_gl::Factory;
-type R = gfx_device_gl::Resources;
+pub(crate) type R = gfx_device_gl::Resources;
 
 /// Black color definition with 4 channels.
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
@@ -114,8 +114,8 @@ impl<'a> Renderer<'a> {
         // Create a shader pipeline
         let pso = factory
             .create_pipeline_simple(
-                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/screen.glslv")),
-                include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/shaders/screen.glslf")),
+                include_bytes!("../shaders/screen.glslv"),
+                include_bytes!("../shaders/screen.glslf"),
                 pipe::new(),
             )
             .unwrap();
