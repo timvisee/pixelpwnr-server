@@ -51,6 +51,7 @@ gfx_defines! {
 
 pub struct StatsRenderer<F: Factory<R> + Clone> {
     /// The corner to render the stats in.
+    #[allow(unused)]
     corner: Corner,
 
     /// The rendering offset.

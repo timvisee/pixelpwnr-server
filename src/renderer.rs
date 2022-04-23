@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -6,7 +7,7 @@ use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
 use gfx_glutin::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
 use glutin::dpi::LogicalSize;
-use glutin::event::{DeviceEvent, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use glutin::event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use glutin::{ContextBuilder, GlProfile, GlRequest, Robustness};
 
 use gfx::{self, *};
@@ -53,6 +54,7 @@ pub struct Renderer<'a> {
     events_loop: EventLoop<()>,
 
     // A FPS counter for the renderer.
+    #[allow(unused)]
     fps: FpsCounter,
 }
 
@@ -79,6 +81,7 @@ impl<'a> Renderer<'a> {
         stats_offset: (u32, u32),
         stats_padding: i32,
         stats_col_spacing: i32,
+        keep_running: Arc<AtomicBool>,
     ) {
         // Get the size of the canvas
         let size = self.pixmap.dimentions();
@@ -114,6 +117,8 @@ impl<'a> Renderer<'a> {
                 .build_windowed(builder, &self.events_loop)
                 .unwrap()
                 .init_gfx();
+
+        let my_window_id = window.window().id();
 
         // Create the command encoder
         let mut encoder: gfx::Encoder<_, _> = factory.create_command_buffer().into();
@@ -168,8 +173,8 @@ impl<'a> Renderer<'a> {
         self.events_loop.run(move |event, _target, control_flow| {
             let exit = match &event {
                 Event::WindowEvent {
+                    window_id,
                     event: window_event,
-                    ..
                 } => match window_event {
                     WindowEvent::KeyboardInput { input, .. } => {
                         if let KeyboardInput {
@@ -177,21 +182,12 @@ impl<'a> Renderer<'a> {
                             ..
                         } = input
                         {
-                            true
+                            window_id == &my_window_id
                         } else {
                             false
                         }
                     }
                     WindowEvent::CloseRequested => true,
-                    _ => false,
-                },
-                Event::DeviceEvent {
-                    event: device_event,
-                    ..
-                } => match device_event {
-                    DeviceEvent::Key(KeyboardInput {
-                        virtual_keycode, ..
-                    }) => &Some(VirtualKeyCode::Escape) == virtual_keycode,
                     _ => false,
                 },
                 _ => false,
@@ -238,7 +234,7 @@ impl<'a> Renderer<'a> {
                 device.cleanup();
             }
 
-            *control_flow = if exit {
+            *control_flow = if exit || !keep_running.load(Ordering::Relaxed) {
                 ControlFlow::Exit
             } else {
                 ControlFlow::WaitUntil(last_render + Duration::from_micros(1))
@@ -246,8 +242,9 @@ impl<'a> Renderer<'a> {
         });
     }
 
+    /// This will run forever, or until an escape character is input
     pub fn run_default(self) {
-        self.run(false, 20, (10, 10), 12, 20);
+        self.run(false, 20, (10, 10), 12, 20, Arc::new(AtomicBool::new(true)));
     }
 
     pub fn stats(&self) -> &StatsRenderer<F> {
