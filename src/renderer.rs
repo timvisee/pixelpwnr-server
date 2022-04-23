@@ -1,3 +1,4 @@
+use draw_state::state::{Blend, BlendChannel, BlendValue, Equation, Factor};
 use gfx::handle::ShaderResourceView;
 use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
@@ -26,12 +27,23 @@ pub(crate) type R = gfx_device_gl::Resources;
 /// Black color definition with 4 channels.
 const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
+const CHANNEL: BlendChannel = BlendChannel {
+    equation: Equation::Add,
+    source: Factor::ZeroPlus(BlendValue::SourceAlpha),
+    destination: Factor::OneMinus(BlendValue::SourceAlpha),
+};
+
+const BLEND: Blend = Blend {
+    color: CHANNEL,
+    alpha: CHANNEL,
+};
+
 // Screen shader data pipeline
 gfx_defines! {
     pipeline pipe {
         vbuf: gfx::VertexBuffer<Vertex> = (),
         image: gfx::TextureSampler<[f32; 4]> = "t_Image",
-        out: gfx::RenderTarget<ColorFormat> = "Target0",
+        out: gfx::BlendTarget<ColorFormat> = ("Target0", gfx::state::ColorMask::all(), BLEND),
     }
 }
 

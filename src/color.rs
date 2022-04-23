@@ -22,7 +22,7 @@ pub enum ParseColorError {
 /// value, which is aligned to 4 bytes in memory. This allows atomic use when
 /// directly writing the value in most cases (but not all!).
 #[repr(align(4))]
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub struct Color {
     /// Defines the color with a byte for each of the 4 color channels.
     ///
