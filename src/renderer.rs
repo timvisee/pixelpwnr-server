@@ -7,7 +7,7 @@ use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
 use gfx_glutin::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
 use glutin::dpi::LogicalSize;
-use glutin::event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use glutin::event::{Event, VirtualKeyCode, WindowEvent};
 use glutin::{ContextBuilder, GlProfile, GlRequest, Robustness};
 
 use gfx::{self, *};
@@ -168,30 +168,39 @@ impl<'a> Renderer<'a> {
             )
             .expect("failed to initialize stats text renderer");
 
-        let mut last_render = Instant::now();
+        let mut next_frame_time = Instant::now();
 
         self.events_loop.run(move |event, _target, control_flow| {
-            let exit = match &event {
-                Event::WindowEvent {
-                    window_id,
-                    event: window_event,
-                } => match window_event {
-                    WindowEvent::KeyboardInput { input, .. } => {
-                        if let KeyboardInput {
-                            virtual_keycode: Some(VirtualKeyCode::Escape),
-                            ..
-                        } = input
-                        {
-                            window_id == &my_window_id
-                        } else {
-                            false
-                        }
+            if !keep_running.load(Ordering::SeqCst) {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+
+            let keycode = if let Event::WindowEvent { window_id, event } = &event {
+                if window_id == &my_window_id {
+                    if let WindowEvent::KeyboardInput { input, .. } = event {
+                        input.virtual_keycode
+                    } else {
+                        None
                     }
-                    WindowEvent::CloseRequested => true,
-                    _ => false,
-                },
-                _ => false,
+                } else {
+                    None
+                }
+            } else {
+                None
             };
+
+            let is_close_request = if let Event::WindowEvent {
+                window_id,
+                event: WindowEvent::CloseRequested,
+            } = &event
+            {
+                window_id == &my_window_id
+            } else {
+                false
+            };
+
+            let exit = keycode == Some(VirtualKeyCode::Escape) || is_close_request;
 
             if let Event::WindowEvent {
                 event: WindowEvent::Resized(s),
@@ -211,12 +220,12 @@ impl<'a> Renderer<'a> {
 
             // We don't want to re-render the whole frame each time someone moves their mouse, so let's
             // put a time limit on it
-            if Instant::now().duration_since(last_render) > Duration::from_millis(1) {
-                last_render = Instant::now();
+            if Instant::now() > next_frame_time {
                 data.image = (
                     Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
                     factory.create_sampler_linear(),
                 );
+
                 // Clear the buffer
                 encoder.clear(&data.out, BLACK);
 
@@ -232,13 +241,15 @@ impl<'a> Renderer<'a> {
                 window.swap_buffers().unwrap();
 
                 device.cleanup();
+                // Reserve at least 1 ms for processing input events
+                next_frame_time = Instant::now() + Duration::from_millis(1);
             }
 
-            *control_flow = if exit || !keep_running.load(Ordering::Relaxed) {
-                ControlFlow::Exit
+            if exit || !keep_running.load(Ordering::SeqCst) {
+                keep_running.store(false, Ordering::SeqCst);
             } else {
-                ControlFlow::WaitUntil(last_render + Duration::from_micros(1))
-            };
+                *control_flow = ControlFlow::WaitUntil(next_frame_time);
+            }
         });
     }
 
