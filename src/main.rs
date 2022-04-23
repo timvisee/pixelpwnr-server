@@ -69,7 +69,7 @@ async fn main() {
 
     // Render the pixelflut screen
     if !arg_handler.no_render {
-        render(&arg_handler, &pixmap, stats);
+        render(&arg_handler, pixmap, stats);
     } else {
         // Do not render, wait on the server thread instead
         println!("Not rendering canvas, disabled with the --no-render flag");
@@ -113,9 +113,9 @@ fn handle_socket(mut socket: TcpStream, pixmap: Arc<Pixmap>, stats: Arc<Stats>) 
 }
 
 /// Start the pixel map renderer.
-fn render(arg_handler: &Opts, pixmap: &Pixmap, stats: Arc<Stats>) {
+fn render(arg_handler: &Opts, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
     // Build the renderer
-    let mut renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
+    let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
 
     // Borrow the statistics text
     let stats_text = renderer.stats().text();
