@@ -1,5 +1,7 @@
 extern crate gfx_text;
 
+use gfx_glutin::WindowUpdateExt;
+use glutin::{PossiblyCurrent, WindowedContext};
 use parking_lot::Mutex;
 use std::cmp::max;
 use std::iter::Extend;
@@ -13,11 +15,10 @@ use gfx::{self, *};
 use self::gfx_text::{
     Error as GfxTextError, HorizontalAnchor, Renderer as TextRenderer, VerticalAnchor,
 };
-use gfx_window_glutin as gfx_glutin;
-use glutin::GlWindow;
+use old_school_gfx_glutin_ext as gfx_glutin;
 
 use crate::primitive::create_quad;
-use crate::renderer::{DepthFormat, R, ColorFormat};
+use crate::renderer::{ColorFormat, DepthFormat, R};
 use crate::vertex::*;
 
 /// White color definition with 4 channels.
@@ -348,10 +349,14 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     /// Update the stats rendering view, and the window dimentions.
     /// This should be called when the GL rendering window is resized.
     // TODO: also update the text view here
-    pub fn update_views(&mut self, window: &GlWindow, dimentions: (f32, f32)) {
+    pub fn update_views(
+        &mut self,
+        window: &WindowedContext<PossiblyCurrent>,
+        dimentions: (f32, f32),
+    ) {
         // Update the views
         if let Some(data) = self.bg_data.as_mut() {
-            gfx_glutin::update_views(window, &mut data.out, self.bg_depth.as_mut().unwrap())
+            window.update_gfx(&mut data.out, self.bg_depth.as_mut().unwrap());
         }
 
         // Update the window dimentions

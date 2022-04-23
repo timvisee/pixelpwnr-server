@@ -2,15 +2,15 @@ use draw_state::state::{Blend, BlendChannel, BlendValue, Equation, Factor};
 use gfx::handle::ShaderResourceView;
 use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
-use glutin::Event::WindowEvent;
-use glutin::WindowEvent::{Closed, KeyboardInput as WindowKeyboardInput, Resized};
-use glutin::{
-    ContextBuilder, EventsLoop, GlContext, GlProfile, GlRequest, KeyboardInput, Robustness,
-    VirtualKeyCode, WindowBuilder,
-};
+use gfx_glutin::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
+use glutin::dpi::LogicalSize;
+use glutin::event::WindowEvent;
+use glutin::{ContextBuilder, GlProfile, GlRequest, Robustness};
 
 use gfx::{self, *};
-use gfx_window_glutin as gfx_glutin;
+use glutin::event_loop::EventLoop;
+use glutin::window::{Fullscreen, WindowBuilder};
+use old_school_gfx_glutin_ext as gfx_glutin;
 
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
@@ -59,7 +59,7 @@ pub struct Renderer<'a> {
     stats: StatsRenderer<F>,
 
     // Glutin events loop.
-    events_loop: EventsLoop,
+    events_loop: EventLoop<()>,
 
     // A FPS counter for the renderer.
     fps: FpsCounter,
@@ -76,7 +76,7 @@ impl<'a> Renderer<'a> {
             title,
             pixmap,
             stats: StatsRenderer::new(Corner::TopLeft),
-            events_loop: glutin::EventsLoop::new(),
+            events_loop: EventLoop::new(),
             fps: FpsCounter::new(),
         }
     }
@@ -95,7 +95,7 @@ impl<'a> Renderer<'a> {
         // Select a monitor for full screening
         // TODO: allow selecting a specific monitor
         let monitor = if fullscreen {
-            Some(self.events_loop.get_primary_monitor())
+            Some(Fullscreen::Borderless(self.events_loop.primary_monitor()))
         } else {
             None
         };
@@ -104,21 +104,26 @@ impl<'a> Renderer<'a> {
         let builder = WindowBuilder::new()
             .with_title(self.title.to_string())
             .with_fullscreen(monitor)
-            .with_dimensions(size.0 as u32, size.1 as u32);
+            .with_inner_size(LogicalSize {
+                width: size.0 as f64,
+                height: size.1 as f64,
+            });
 
         // Define the graphics context
         // TODO: properly configure this context
-        let context = ContextBuilder::new()
-            .with_srgb(true)
-            .with_gl(GlRequest::Latest)
-            .with_gl_robustness(Robustness::TryRobustNoResetNotification)
-            .with_gl_profile(GlProfile::Core)
-            .with_multisampling(1)
-            .with_vsync(true);
-
-        // Initialize glutin
         let (window, mut device, mut factory, mut main_color, mut main_depth) =
-            gfx_glutin::init::<ColorFormat, DepthFormat>(builder, context, &self.events_loop);
+            ContextBuilder::new()
+                .with_srgb(true)
+                .with_gl(GlRequest::Latest)
+                .with_gl_robustness(Robustness::TryRobustNoResetNotification)
+                .with_gl_profile(GlProfile::Core)
+                .with_multisampling(1)
+                .with_vsync(true)
+                .with_gfx_color_depth::<ColorFormat, DepthFormat>()
+                .with_gl_debug_flag(true)
+                .build_windowed(builder, &self.events_loop)
+                .unwrap()
+                .init_gfx();
 
         // Create the command encoder
         let mut encoder: gfx::Encoder<_, _> = factory.create_command_buffer().into();
@@ -181,60 +186,47 @@ impl<'a> Renderer<'a> {
                 factory.create_sampler_linear(),
             );
 
-            // Update graphics when required
-            // if update {
-            //     // TODO: can we remove this?
-            //     let (vertex_buffer, slice_new) = plane.create_vertex_buffer(&mut factory);
-
-            //     // Redefine the vertex buffer and slice
-            //     data.vbuf = vertex_buffer;
-            //     slice = slice_new;
-
-            //     // We've successfully updated
-            //     update = false
-            // }
-
+            // TODO: find a way to reenable this
             // Poll for events
-            self.events_loop.poll_events(|event| {
-                match event {
-                    WindowEvent {
-                        window_id: _,
-                        event,
-                    } => match event {
-                        // Stop running when escape is pressed
-                        WindowKeyboardInput {
-                            device_id: _,
-                            input:
-                                KeyboardInput {
-                                    scancode: _,
-                                    state: _,
-                                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                                    modifiers: _,
-                                },
-                        }
-                        | Closed => running = false,
+            // self.events_loop.poll_events(|event| {
+            //     match event {
+            //         WindowEvent {
+            //             window_id: _,
+            //             event,
+            //         } => match event {
+            //             // Stop running when escape is pressed
+            //             WindowKeyboardInput {
+            //                 device_id: _,
+            //                 input:
+            //                     KeyboardInput {
+            //                         scancode: _,
+            //                         state: _,
+            //                         virtual_keycode: Some(VirtualKeyCode::Escape),
+            //                         modifiers: _,
+            //                     },
+            //             } => running = false,
 
-                        // Update the view when the window is resized
-                        Resized(w, h) => {
-                            dimentions = (w as f32, h as f32);
-                            update = true;
-                            update_views = true;
-                        }
+            //             // Update the view when the window is resized
+            //             Resized(s) => {
+            //                 dimentions = (s.width as f32, s.height as f32);
+            //                 update = true;
+            //                 update_views = true;
+            //             }
 
-                        _ => {}
-                    },
+            //             _ => {}
+            //         },
 
-                    _ => {}
-                }
-            });
+            //         _ => {}
+            //     }
+            // });
 
             // Update the views if required
             if update_views {
                 // Update the main color and depth
-                gfx_glutin::update_views(&window, &mut main_color, &mut main_depth);
+                window.update_gfx(&mut main_color, &mut main_depth);
 
                 // Update the pixel texture
-                gfx_glutin::update_views(&window, &mut data.out, &mut data_depth);
+                window.update_gfx(&mut data.out, &mut data_depth);
 
                 // Update the stats text
                 self.stats.update_views(&window, dimentions);
