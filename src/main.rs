@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pixelpwnr_render::color::Color;
 use pixelpwnr_render::pixmap::Pixmap;
 use pixelpwnr_render::renderer::Renderer;
@@ -13,7 +15,7 @@ pub fn main() {
         .unwrap();
 
     // Build the renderer
-    let mut renderer = Renderer::new("pixelpwnr-render", &pixmap);
+    let renderer = Renderer::new("pixelpwnr-render", Arc::new(pixmap));
 
     // Run
     renderer.run_default();

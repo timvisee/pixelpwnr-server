@@ -1,14 +1,16 @@
-use draw_state::state::{Blend, BlendChannel, BlendValue, Equation, Factor};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use gfx::handle::ShaderResourceView;
 use gfx::texture::{AaMode, Kind, Mipmap};
 use gfx::traits::FactoryExt;
 use gfx_glutin::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
 use glutin::dpi::LogicalSize;
-use glutin::event::WindowEvent;
+use glutin::event::{DeviceEvent, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use glutin::{ContextBuilder, GlProfile, GlRequest, Robustness};
 
 use gfx::{self, *};
-use glutin::event_loop::EventLoop;
+use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::window::{Fullscreen, WindowBuilder};
 use old_school_gfx_glutin_ext as gfx_glutin;
 
@@ -42,7 +44,7 @@ pub struct Renderer<'a> {
     title: &'a str,
 
     // Pixel map holding the screen data.
-    pixmap: &'a Pixmap,
+    pixmap: Arc<Pixmap>,
 
     // Used to render statistics on the canvas.
     stats: StatsRenderer<F>,
@@ -59,7 +61,7 @@ impl<'a> Renderer<'a> {
     ///
     /// The renderer window title should be given to `title`.
     /// The pixel map that is rendered should be given to `pixmap`.
-    pub fn new(title: &'a str, pixmap: &'a Pixmap) -> Renderer<'a> {
+    pub fn new(title: &'a str, pixmap: Arc<Pixmap>) -> Renderer<'a> {
         // Construct and return the renderer
         Renderer {
             title,
@@ -71,7 +73,7 @@ impl<'a> Renderer<'a> {
     }
 
     pub fn run(
-        &mut self,
+        mut self,
         fullscreen: bool,
         stats_size: u8,
         stats_offset: (u32, u32),
@@ -107,9 +109,8 @@ impl<'a> Renderer<'a> {
                 .with_gl_robustness(Robustness::TryRobustNoResetNotification)
                 .with_gl_profile(GlProfile::Core)
                 .with_multisampling(1)
-                .with_vsync(true)
                 .with_gfx_color_depth::<ColorFormat, DepthFormat>()
-                .with_gl_debug_flag(true)
+                .with_vsync(true)
                 .build_windowed(builder, &self.events_loop)
                 .unwrap()
                 .init_gfx();
@@ -147,12 +148,7 @@ impl<'a> Renderer<'a> {
             out: main_color.clone(),
         };
 
-        // Rendering flags
-        let mut running = true;
-        let mut update = false;
-        let mut update_views = false;
-        let mut dimentions = (size.0 as f32, size.1 as f32);
-
+        let dimentions = (size.0 as f32, size.1 as f32);
         // Build the stats renderer
         self.stats
             .init(
@@ -167,50 +163,46 @@ impl<'a> Renderer<'a> {
             )
             .expect("failed to initialize stats text renderer");
 
-        // Keep rendering until we're done
-        while running {
-            // Create a texture with the new data, set it to upload
-            data.image = (
-                Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
-                factory.create_sampler_linear(),
-            );
+        let mut last_render = Instant::now();
 
-            // TODO: find a way to reenable this
-            // Poll for events
-            // self.events_loop.poll_events(|event| {
-            //     match event {
-            //         WindowEvent {
-            //             window_id: _,
-            //             event,
-            //         } => match event {
-            //             // Stop running when escape is pressed
-            //             WindowKeyboardInput {
-            //                 device_id: _,
-            //                 input:
-            //                     KeyboardInput {
-            //                         scancode: _,
-            //                         state: _,
-            //                         virtual_keycode: Some(VirtualKeyCode::Escape),
-            //                         modifiers: _,
-            //                     },
-            //             } => running = false,
+        self.events_loop.run(move |event, _target, control_flow| {
+            let exit = match &event {
+                Event::WindowEvent {
+                    event: window_event,
+                    ..
+                } => match window_event {
+                    WindowEvent::KeyboardInput { input, .. } => {
+                        if let KeyboardInput {
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        } = input
+                        {
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    WindowEvent::CloseRequested => true,
+                    _ => false,
+                },
+                Event::DeviceEvent {
+                    event: device_event,
+                    ..
+                } => match device_event {
+                    DeviceEvent::Key(KeyboardInput {
+                        virtual_keycode, ..
+                    }) => &Some(VirtualKeyCode::Escape) == virtual_keycode,
+                    _ => false,
+                },
+                _ => false,
+            };
 
-            //             // Update the view when the window is resized
-            //             Resized(s) => {
-            //                 dimentions = (s.width as f32, s.height as f32);
-            //                 update = true;
-            //                 update_views = true;
-            //             }
-
-            //             _ => {}
-            //         },
-
-            //         _ => {}
-            //     }
-            // });
-
-            // Update the views if required
-            if update_views {
+            if let Event::WindowEvent {
+                event: WindowEvent::Resized(s),
+                ..
+            } = event
+            {
+                let dimentions = (s.width as f32, s.height as f32);
                 // Update the main color and depth
                 window.update_gfx(&mut main_color, &mut main_depth);
 
@@ -219,32 +211,42 @@ impl<'a> Renderer<'a> {
 
                 // Update the stats text
                 self.stats.update_views(&window, dimentions);
-
-                update_views = false;
             }
 
-            // Clear the buffer
-            encoder.clear(&data.out, BLACK);
+            // We don't want to re-render the whole frame each time someone moves their mouse, so let's
+            // put a time limit on it
+            if Instant::now().duration_since(last_render) > Duration::from_millis(1) {
+                last_render = Instant::now();
+                data.image = (
+                    Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
+                    factory.create_sampler_linear(),
+                );
+                // Clear the buffer
+                encoder.clear(&data.out, BLACK);
 
-            // Draw through the pipeline
-            encoder.draw(&slice, &pso, &data);
+                // Draw through the pipeline
+                encoder.draw(&slice, &pso, &data);
 
-            // Draw the stats
-            self.stats.draw(&mut encoder, &main_color).unwrap();
+                // Draw the stats
+                self.stats.draw(&mut encoder, &main_color).unwrap();
 
-            encoder.flush(&mut device);
+                encoder.flush(&mut device);
 
-            // Swap the frame buffers
-            window.swap_buffers().unwrap();
+                // Swap the frame buffers
+                window.swap_buffers().unwrap();
 
-            device.cleanup();
+                device.cleanup();
+            }
 
-            // Tick the FPS counter
-            //self.fps.tick();
-        }
+            *control_flow = if exit {
+                ControlFlow::Exit
+            } else {
+                ControlFlow::WaitUntil(last_render + Duration::from_micros(1))
+            };
+        });
     }
 
-    pub fn run_default(&mut self) {
+    pub fn run_default(self) {
         self.run(false, 20, (10, 10), 12, 20);
     }
 

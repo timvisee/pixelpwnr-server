@@ -155,8 +155,8 @@ impl Color {
     ///
     /// Self should be the current value, and `other` should be the incoming value
     pub fn blend(&mut self, other: Color) {
-        // Self = destination
-        // Other = source
+        // Self = destination = ptr
+        // Other = source = rgba
 
         let mut r = other.red();
         let mut g = other.green();
