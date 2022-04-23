@@ -51,23 +51,23 @@ impl Color {
     }
 
     /// Get the red value, in the range `[0, 255)`.
-    pub fn red(&self) -> u8 {
-        (self.value & 0xFF) as u8
+    pub fn red(&self) -> u32 {
+        self.value & 0xFF
     }
 
     /// Get green green value, in the range `[0, 255)`.
-    pub fn green(&self) -> u8 {
-        ((self.value & 0xFF00) >> 8) as u8
+    pub fn green(&self) -> u32 {
+        (self.value & 0xFF00) >> 8
     }
 
     /// Get the blue value, in the range `[0, 255)`.
-    pub fn blue(&self) -> u8 {
-        ((self.value & 0xFF0000) >> 16) as u8
+    pub fn blue(&self) -> u32 {
+        (self.value & 0xFF0000) >> 16
     }
 
     /// Get the alpha value, in the range `[0, 255)`.
-    pub fn alpha(&self) -> u8 {
-        ((self.value & 0xFF000000) >> 24) as u8
+    pub fn alpha(&self) -> u32 {
+        (self.value & 0xFF000000) >> 24
     }
 
     /// Construct a new color, from the given hexadecimal string.
@@ -149,6 +149,30 @@ impl Color {
     /// Get the raw color value, as single u32.
     pub fn to_raw(&self) -> u32 {
         self.value
+    }
+
+    /// Blend this color with another
+    ///
+    /// Self should be the current value, and `other` should be the incoming value
+    pub fn blend(&mut self, other: Color) {
+        // Self = destination
+        // Other = source
+
+        let mut r = other.red();
+        let mut g = other.green();
+        let mut b = other.blue();
+        let mut a = other.alpha();
+
+        if a == 0 {
+            return;
+        } else if a < u8::MAX as u32 {
+            let na = u8::MAX as u32 - a;
+            r = ((a * r) + (na * self.red())) / 0xFF;
+            g = ((a * g) + (na * self.green())) / 0xFF;
+            b = ((a * b) + (na * self.blue())) / 0xFF;
+            a = a + self.alpha();
+        }
+        self.value = r & 0xFF | (g & 0xFF) << 8 | (b & 0xFF) << 16 | (a & 0xFF) << 24;
     }
 }
 

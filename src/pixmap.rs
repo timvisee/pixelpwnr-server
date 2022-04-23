@@ -74,7 +74,9 @@ impl Pixmap {
 
     /// Set the pixel at the given coordinate, to the given color.
     pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
-        self.set_pixel_raw(x, y, color.to_raw())
+        let mut current_color = self.pixel(x, y)?;
+        current_color.blend(color);
+        self.set_pixel_raw(x, y, current_color.to_raw())
     }
 
     /// Set the pixel at the given coordinate, to the given raw color value.
