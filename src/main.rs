@@ -83,7 +83,6 @@ async fn listen(listener: std::net::TcpListener, pixmap: Arc<Pixmap>, stats: Arc
     let listener = TcpListener::from_std(listener).unwrap();
 
     loop {
-        // Create a worker thread that assigns work to a futures threadpool
         let pixmap_worker = pixmap.clone();
         let stats_worker = stats.clone();
         let (socket, _) = if let Ok(res) = listener.accept().await {
@@ -105,10 +104,6 @@ fn handle_socket(mut socket: TcpStream, pixmap: Arc<Pixmap>, stats: Arc<Stats>) 
     // Increase the number of clients
     stats.inc_clients();
 
-    // Wrap the socket with the Lines codec,
-    // to interact with lines instead of raw bytes
-
-    // Define a client as connection
     let disconnect_stats = stats.clone();
 
     let pixmap = pixmap.clone();
@@ -117,6 +112,8 @@ fn handle_socket(mut socket: TcpStream, pixmap: Arc<Pixmap>, stats: Arc<Stats>) 
     tokio::spawn(async move {
         let socket = Pin::new(&mut socket);
 
+        // Wrap the socket with the Lines codec,
+        // to interact with lines instead of raw bytes
         let mut lines = Lines::new(socket, stats.clone());
         let lines = Pin::new(&mut lines);
         let connection = Client::new(lines, pixmap, stats);

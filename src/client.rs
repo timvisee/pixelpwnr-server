@@ -168,11 +168,10 @@ where
             }
         }
 
-        // As always, it is important to not just return `NotReady` without
-        // ensuring an inner future also returned `NotReady`.
-        //
-        // We know we got a `NotReady` from either `self.rx` or `self.lines`, so
-        // the contract is respected.
+        // As always, it is important to not just return `Pending` without
+        // ensuring an inner future also returned `Pending`.
+        // Since we know for certain that we have received a `Poll::Pending`
+        // from `self.lines`, we can safely return `Poll::Pending`.
         Poll::Pending
     }
 }

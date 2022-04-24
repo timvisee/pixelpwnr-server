@@ -174,8 +174,7 @@ where
     ) -> Poll<Option<Self::Item>> {
         let mut lines = Vec::with_capacity(self.rd.len() / 8);
 
-        // No command (or error) was found, try to fill the read buffer
-        // Then, try to read any new data into the read buffer
+        // Try to read any new data into the read buffer
         let fill_read_buf = self.as_mut().fill_read_buf(cx);
         let new_rd_len = self.rd.len();
 
@@ -183,8 +182,14 @@ where
             // An error occured (most likely disconnection)
             Poll::Ready(Err(_)) => return Poll::Ready(None),
             Poll::Ready(Ok(_)) => {
-                // Make sure the buffer has enough data in it to be a valid command
                 if new_rd_len < 2 {
+                    // If the buffer cannot possibly contain a command, it makes sense
+                    // to return `Poll::Pending`. However, this also means that we've now
+                    // created our own pending condition that does not have a waker set by
+                    // an underlying implementation. To avoid having to set that up, we simply
+                    // defer our waking to `fill_read_buf` (which in turn defers it to some tokio::io
+                    // impl) by waking our task immediately.
+                    cx.waker().wake_by_ref();
                     return Poll::Pending;
                 }
             }
