@@ -1,3 +1,6 @@
+mod ref_values;
+pub mod stats_renderer;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -18,8 +21,8 @@ use old_school_gfx_glutin_ext as gfx_glutin;
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
 use crate::primitive::create_quad_max;
-use crate::stats_renderer::{Corner, StatsRenderer};
 use crate::vertex::Vertex;
+use stats_renderer::{Corner, StatsRenderer};
 
 /// Define used types
 pub(crate) type ColorFormat = gfx::format::Rgba8;
@@ -120,14 +123,19 @@ impl<'a> Renderer<'a> {
 
         let my_window_id = window.window().id();
 
+        // command_buffer.set_ref_values(RefValues {
+        //     stencil: (0, 0),
+        //     blend: [0.5, 0.5, 0.5, 0.5],
+        // });
+
         // Create the command encoder
         let mut encoder: gfx::Encoder<_, _> = factory.create_command_buffer().into();
 
         // Create a shader pipeline
         let pso = factory
             .create_pipeline_simple(
-                include_bytes!("../shaders/screen.glslv"),
-                include_bytes!("../shaders/screen.glslf"),
+                include_bytes!("../../shaders/screen.glslv"),
+                include_bytes!("../../shaders/screen.glslf"),
                 pipe::new(),
             )
             .unwrap();
@@ -220,7 +228,7 @@ impl<'a> Renderer<'a> {
 
             // We don't want to re-render the whole frame each time someone moves their mouse, so let's
             // put a time limit on it
-            if Instant::now() > next_frame_time {
+            if Instant::now() > next_frame_time || event == Event::MainEventsCleared {
                 data.image = (
                     Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
                     factory.create_sampler_linear(),
@@ -241,7 +249,7 @@ impl<'a> Renderer<'a> {
                 window.swap_buffers().unwrap();
 
                 device.cleanup();
-                // Reserve at least 1 ms for processing input events
+                // Reserve at most 1 ms for processing input events
                 next_frame_time = Instant::now() + Duration::from_millis(1);
             }
 

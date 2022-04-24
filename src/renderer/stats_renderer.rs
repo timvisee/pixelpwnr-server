@@ -1,5 +1,4 @@
-extern crate gfx_text;
-
+use draw_state::state::{Blend, BlendChannel, BlendValue, Equation, Factor};
 use gfx_glutin::WindowUpdateExt;
 use glutin::{PossiblyCurrent, WindowedContext};
 use parking_lot::Mutex;
@@ -12,17 +11,29 @@ use gfx::handle::{DepthStencilView, RenderTargetView};
 use gfx::traits::FactoryExt;
 use gfx::{self, *};
 
-use self::gfx_text::{
-    Error as GfxTextError, HorizontalAnchor, Renderer as TextRenderer, VerticalAnchor,
-};
+use gfx_text::{Error as GfxTextError, HorizontalAnchor, Renderer as TextRenderer, VerticalAnchor};
 use old_school_gfx_glutin_ext as gfx_glutin;
 
+use super::ref_values::RefValuesWrapper;
 use crate::primitive::create_quad;
 use crate::renderer::{ColorFormat, DepthFormat, R};
 use crate::vertex::*;
 
 /// White color definition with 4 channels.
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
+const BLEND: Blend = Blend {
+    color: BlendChannel {
+        equation: Equation::Add,
+        source: Factor::Zero,
+        destination: Factor::ZeroPlus(BlendValue::ConstAlpha),
+    },
+    alpha: BlendChannel {
+        equation: Equation::Add,
+        source: Factor::Zero,
+        destination: Factor::Zero,
+    },
+};
 
 // Screen shader data pipeline
 gfx_defines! {
@@ -31,21 +42,9 @@ gfx_defines! {
         out: gfx::BlendTarget<ColorFormat> = (
             "Target0",
             gfx::state::ColorMask::all(),
-            gfx::state::Blend {
-                color: gfx::state::BlendChannel {
-                    equation: gfx::state::Equation::Add,
-                    source: gfx::state::Factor::SourceAlphaSaturated,
-                    destination: gfx::state::Factor::OneMinus(
-                        gfx::state::BlendValue::SourceAlpha
-                    ),
-                },
-                alpha: gfx::state::BlendChannel {
-                    equation: gfx::state::Equation::Add,
-                    source: gfx::state::Factor::One,
-                    destination: gfx::state::Factor::Zero,
-                },
-            }
+            BLEND,
         ),
+        ref_values: RefValuesWrapper = RefValuesWrapper::new(),
     }
 }
 
@@ -158,6 +157,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         self.bg_data = Some(bg_pipe::Data {
             vbuf: vertex_buffer,
             out: main_color,
+            ref_values: (),
         });
 
         // Set the factory and depth stencil

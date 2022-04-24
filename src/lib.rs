@@ -4,7 +4,7 @@ mod model;
 pub mod pixmap;
 mod primitive;
 pub mod renderer;
-pub mod stats_renderer;
+pub use renderer::stats_renderer;
 mod vertex;
 
 // Reexport types
