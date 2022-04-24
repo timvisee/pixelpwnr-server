@@ -6,7 +6,13 @@ mod stat_monitor;
 mod stat_reporter;
 mod stats;
 
-use std::{pin::Pin, sync::Arc};
+use std::{
+    pin::Pin,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use clap::StructOpt;
 use pixelpwnr_render::{Pixmap, Renderer};
@@ -21,59 +27,72 @@ use crate::arg_handler::Opts;
 
 // TODO: use some constant for new lines
 
-/// Main application entrypoint.
-#[tokio::main]
-async fn main() {
-    // Parse CLI arguments
+fn main() {
     let arg_handler = Opts::parse();
-
-    // Build the pixelmap size
-    let size = arg_handler.size();
-    let pixmap = Arc::new(Pixmap::new(size.0, size.1));
-    println!("Canvas size: {}x{}", size.0, size.1);
 
     // Build a stats manager, load persistent stats
     let mut stats = Stats::new();
-    if let Some(path) = arg_handler.stats_file.clone() {
+    if let Some(path) = &arg_handler.stats_file {
         if let Some(raw) = StatsRaw::load(path.as_path()) {
             stats.from_raw(&raw);
         }
     }
     let stats = Arc::new(stats);
 
-    // Start a server listener in a new thread
-    let pixmap_thread = pixmap.clone();
-    let stats_thread = stats.clone();
+    let (width, height) = arg_handler.size();
+    let pixmap = Arc::new(Pixmap::new(width, height));
+    println!("Canvas size: {}x{}", width, height);
+
+    // Create a new runtime to be ran on a different (set of) OS threads
+    // so that we don't block the runtime by running the renderer on it
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let net_running = Arc::new(AtomicBool::new(true));
+
+    // Create a std threa first. Tokio's [`TcpStream::listen`] automatically sets
+    // SO_REUSEADDR which means that it won't return an error if another program is
+    // already listening on our port/address. Weird.
     let host = arg_handler.host;
+    let listener = match std::net::TcpListener::bind(&host) {
+        Ok(v) => v,
+        Err(e) => panic!("Failed to bind to address {:?}. Error: {:?}", &host, e),
+    };
+    println!("Listening on: {}", host);
 
-    let server_thread = tokio::spawn(async move {
-        let listener = TcpListener::bind(&host).await.expect("Bind error");
-        println!("Listening on: {}", host);
-
-        // Infinitely accept sockets from our `TcpListener`.
-        // Send work to the worker
-
-        loop {
-            // Create a worker thread that assigns work to a futures threadpool
-            let pixmap_worker = pixmap_thread.clone();
-            let stats_worker = stats_thread.clone();
-            let (socket, _) = if let Ok(res) = listener.accept().await {
-                res
-            } else {
-                println!("Failed to accept a connection");
-                continue;
-            };
-            handle_socket(socket, pixmap_worker, stats_worker);
-        }
+    let net_pixmap = pixmap.clone();
+    let net_stats = stats.clone();
+    let net_running_2 = net_running.clone();
+    let tokio_runtime = std::thread::spawn(move || {
+        runtime.block_on(async move {
+            listen(listener, net_pixmap, net_stats).await;
+            net_running_2.store(false, Ordering::Relaxed);
+        })
     });
 
-    // Render the pixelflut screen
     if !arg_handler.no_render {
-        render(&arg_handler, pixmap, stats);
+        render(&arg_handler, pixmap, stats, net_running);
     } else {
-        // Do not render, wait on the server thread instead
-        println!("Not rendering canvas, disabled with the --no-render flag");
-        server_thread.await.unwrap();
+        tokio_runtime.join().unwrap()
+    }
+}
+
+async fn listen(listener: std::net::TcpListener, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
+    let listener = TcpListener::from_std(listener).unwrap();
+
+    loop {
+        // Create a worker thread that assigns work to a futures threadpool
+        let pixmap_worker = pixmap.clone();
+        let stats_worker = stats.clone();
+        let (socket, _) = if let Ok(res) = listener.accept().await {
+            res
+        } else {
+            println!("Failed to accept a connection");
+            continue;
+        };
+        handle_socket(socket, pixmap_worker, stats_worker);
     }
 }
 
@@ -113,7 +132,12 @@ fn handle_socket(mut socket: TcpStream, pixmap: Arc<Pixmap>, stats: Arc<Stats>) 
 }
 
 /// Start the pixel map renderer.
-fn render(arg_handler: &Opts, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
+fn render(
+    arg_handler: &Opts,
+    pixmap: Arc<Pixmap>,
+    stats: Arc<Stats>,
+    net_running: Arc<AtomicBool>,
+) {
     // Build the renderer
     let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
 
@@ -138,5 +162,6 @@ fn render(arg_handler: &Opts, pixmap: Arc<Pixmap>, stats: Arc<Stats>) {
         arg_handler.stats_offset(),
         arg_handler.stats_padding,
         arg_handler.stats_col_spacing,
+        net_running,
     );
 }
