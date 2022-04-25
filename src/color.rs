@@ -4,6 +4,15 @@ use std::num::ParseIntError;
 /// The default alpha channel value, if not specified. (0xFF = opaque)
 const DEFAULT_ALPHA: u8 = 0xFF;
 
+#[derive(Debug, Clone, Copy)]
+pub enum ParseColorError {
+    /// 6 or 8 characters are required
+    /// Value is the actual amount
+    InvalidCharCount(usize),
+    /// An invalid character was encountered
+    InvalidChar(u8),
+}
+
 /// Struct representing a color value.
 ///
 /// This color uses 4 channels, for red, green, blue and alpha.
@@ -13,6 +22,7 @@ const DEFAULT_ALPHA: u8 = 0xFF;
 /// value, which is aligned to 4 bytes in memory. This allows atomic use when
 /// directly writing the value in most cases (but not all!).
 #[repr(align(4))]
+#[derive(PartialEq, Clone, Copy)]
 pub struct Color {
     /// Defines the color with a byte for each of the 4 color channels.
     ///
@@ -25,9 +35,7 @@ impl Color {
     ///
     /// This color value defines the value of all 4 color channels.
     pub fn new(value: u32) -> Self {
-        Color {
-            value,
-        }
+        Color { value }
     }
 
     /// Construct a new color, from RGB values.
@@ -39,29 +47,27 @@ impl Color {
 
     /// Construct a new color, from RGBA values.
     pub fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Color::new(
-            r as u32 | (g as u32) << 8 | (b as u32) << 16 | (a as u32) << 24
-        )
+        Color::new(r as u32 | (g as u32) << 8 | (b as u32) << 16 | (a as u32) << 24)
     }
 
     /// Get the red value, in the range `[0, 255)`.
-    pub fn red(&self) -> u8 {
-        (self.value & 0xFFFFFFFF) as u8
+    pub fn red(&self) -> u32 {
+        self.value & 0xFF
     }
 
     /// Get green green value, in the range `[0, 255)`.
-    pub fn green(&self) -> u8 {
-        (self.value & (0xFFFFFFFF << 8)) as u8
+    pub fn green(&self) -> u32 {
+        (self.value & 0xFF00) >> 8
     }
 
     /// Get the blue value, in the range `[0, 255)`.
-    pub fn blue(&self) -> u8 {
-        (self.value & (0xFFFFFFFF << 16)) as u8
+    pub fn blue(&self) -> u32 {
+        (self.value & 0xFF0000) >> 16
     }
 
     /// Get the alpha value, in the range `[0, 255)`.
-    pub fn alpha(&self) -> u8 {
-        (self.value & (0xFFFFFFFF << 24)) as u8
+    pub fn alpha(&self) -> u32 {
+        (self.value & 0xFF000000) >> 24
     }
 
     /// Construct a new color, from the given hexadecimal string.
@@ -73,11 +79,60 @@ impl Color {
 
         // Shift and add an alpha channel, if it wasn't set
         if value.len() <= 6 {
-            raw = 0xFF | (raw << 8);
+            raw = (raw << 8) | 0xFF;
         }
 
         // Construct and return the color
-        Ok(Color::new(raw.to_be()))
+
+        let color = Color::new(raw.to_be());
+
+        Ok(color)
+    }
+
+    /// Construct a new color, from the given slice.
+    /// The slice should represent hexadecimal characters as ASCII characters,
+    /// meaning that they should be between b'0' and b'9', between b'a' and b'f', or
+    /// between b'A' and b'F'
+    pub fn from_hex_raw(value: &[u8]) -> Result<Self, ParseColorError> {
+        let len = value.len();
+
+        /// This always returns a value 0 <= v <= 15
+        fn parse_char(input: u8) -> Result<u8, ParseColorError> {
+            if input >= b'a' && input <= b'f' {
+                Ok(input - b'a' + 10)
+            } else if input >= b'A' && input <= b'F' {
+                Ok(input - b'A' + 10)
+            } else if input >= b'0' && input <= b'9' {
+                Ok(input - b'0')
+            } else {
+                Err(ParseColorError::InvalidChar(input))
+            }
+        }
+
+        let build = || {
+            let mut raw_u32 = 0u32;
+            for char in value.iter() {
+                raw_u32 <<= 4;
+                raw_u32 |= parse_char(*char)? as u32;
+            }
+            Ok(raw_u32)
+        };
+
+        if len == 6 {
+            let mut value = build()?;
+            // No Alpha byte
+            value = (value << 8) | 0xFF;
+            Ok(Color {
+                value: value.to_be(),
+            })
+        } else if len == 8 {
+            let value = build()?;
+            Ok(Color {
+                value: value.to_be(),
+            })
+        } else {
+            Err(ParseColorError::InvalidCharCount(len))
+        }
     }
 
     /// Get the hexadecimal value of the color.
@@ -95,6 +150,30 @@ impl Color {
     pub fn to_raw(&self) -> u32 {
         self.value
     }
+
+    /// Blend this color with another
+    ///
+    /// Self should be the current value, and `other` should be the incoming value
+    pub fn blend(&mut self, other: Color) {
+        // Self = destination = ptr
+        // Other = source = rgba
+
+        let mut r = other.red();
+        let mut g = other.green();
+        let mut b = other.blue();
+        let mut a = other.alpha();
+
+        if a == 0 {
+            return;
+        } else if a < u8::MAX as u32 {
+            let na = u8::MAX as u32 - a;
+            r = ((a * r) + (na * self.red())) / 0xFF;
+            g = ((a * g) + (na * self.green())) / 0xFF;
+            b = ((a * b) + (na * self.blue())) / 0xFF;
+            a = a + self.alpha();
+        }
+        self.value = r & 0xFF | (g & 0xFF) << 8 | (b & 0xFF) << 16 | (a & 0xFF) << 24;
+    }
 }
 
 impl fmt::Debug for Color {
@@ -102,9 +181,39 @@ impl fmt::Debug for Color {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Only debug the alpha channel if it isn't the default value
         if self.alpha() == 0 {
-            write!(f, "ColorRGB({}, {}, {})", self.red(), self.green(), self.blue())
+            write!(
+                f,
+                "ColorRGB({:X}, {:X}, {:X})",
+                self.red(),
+                self.green(),
+                self.blue()
+            )
         } else {
-            write!(f, "ColorRGBA({}, {}, {}, {})", self.red(), self.green(), self.blue(), self.alpha())
+            write!(
+                f,
+                "ColorRGBA({:X}, {:X}, {:X}, {:X})",
+                self.red(),
+                self.green(),
+                self.blue(),
+                self.alpha()
+            )
         }
     }
+}
+
+#[test]
+fn from_hex_raw() {
+    macro_rules! test {
+        ($in: literal, $out: expr, $print: literal) => {
+            let color_raw = Color::from_hex_raw($in.as_bytes()).unwrap();
+            let color = Color::from_hex($in).unwrap();
+            assert_eq!(color, color_raw);
+            assert_eq!(Color::new($out), color_raw);
+            assert_eq!(format!("{:?}", color_raw), $print);
+        };
+    }
+
+    test!("ABCDEFBA", 0xBAEFCDAB, "ColorRGBA(AB, CD, EF, BA)");
+    test!("AABBCC", 0xFFCCBBAA, "ColorRGBA(AA, BB, CC, FF)");
+    test!("ABCDEF00", 0x00EFCDAB, "ColorRGB(AB, CD, EF)");
 }

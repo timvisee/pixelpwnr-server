@@ -1,7 +1,8 @@
+use lazy_static::lazy_static;
 use std::mem;
 use std::ptr;
 
-use color::Color;
+use crate::color::Color;
 
 lazy_static! {
     /// The default color value for each pixel
@@ -42,7 +43,7 @@ pub struct Pixmap {
 }
 
 impl Pixmap {
-    /// Construct a new 
+    /// Construct a new
     pub fn new(width: usize, height: usize) -> Self {
         Pixmap {
             // Build a pixel map, with the default value and the proper sizeto
@@ -73,7 +74,9 @@ impl Pixmap {
 
     /// Set the pixel at the given coordinate, to the given color.
     pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
-        self.set_pixel_raw(x, y, color.to_raw())
+        let mut current_color = self.pixel(x, y)?;
+        current_color.blend(color);
+        self.set_pixel_raw(x, y, current_color.to_raw())
     }
 
     /// Set the pixel at the given coordinate, to the given raw color value.
@@ -146,9 +149,7 @@ impl Pixmap {
         // faster resulting in insane performance gains. This unsafe bit of
         // code is desirable over safe code that is enormously slower.
         // The implementation below is memory safe.
-        unsafe {
-            mem::transmute(self.as_slice())
-        }
+        unsafe { mem::transmute(self.as_slice()) }
     }
 }
 

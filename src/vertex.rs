@@ -1,3 +1,5 @@
+use gfx::*;
+
 // Generate the vertex struct, for use with graphics
 gfx_defines! {
     vertex Vertex {
