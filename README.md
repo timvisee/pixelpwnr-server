@@ -1,8 +1,8 @@
-# pixelpwnr server (WIP, prototype)
+# pixelpwnr server
 
 **Note:** This project is in the prototype phase,
-and is heavily in development and tested with.
-Further optimization of this server for high-performance
+and is in development and tested with.
+Further optimization of this server for high performance
 use will be done at a later time.
 
 A blazingly fast GPU accelerated [pixelflut][pixelflut] ([video][pixelflut-video])
@@ -14,14 +14,6 @@ server in [Rust][rust].
 * Highly concurrent, to support many connections
 * Linux, Windows and macOS
 * Optional binary PX command for reduced bandwidth requirements (enabled by default).
-
-## Current problems
-In the current prototype version, the following main problems exist:
-
-* Windows connectivity doesn't work
-* Connections not explicitly closed aren't dropped, as there is no timeout
-
-These should be fixed for the first release.
 
 ## Installation
 For installation, Git and Rust cargo are required.
