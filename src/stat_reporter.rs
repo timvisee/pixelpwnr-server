@@ -1,10 +1,11 @@
+use parking_lot::Mutex;
 use std::cmp::min;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::{self, sleep};
 use std::time::{Duration, SystemTime};
 
-use stats::Stats;
+use crate::stats::Stats;
 
 /// A struct that is used to periodically report stats.
 pub struct StatReporter {
@@ -90,10 +91,11 @@ impl StatReporter {
                 // Check the screen update time
                 if let Some(interval) = screen_interval {
                     // Get the last screen time
-                    let mut last = screen_last.lock().unwrap();
+                    let mut last = screen_last.lock();
 
                     // Get the number of elapsed seconds since the last report
-                    let elapsed = last.map(|last| last.elapsed().ok())
+                    let elapsed = last
+                        .map(|last| last.elapsed().ok())
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
@@ -101,51 +103,49 @@ impl StatReporter {
                     if last.is_none() || elapsed >= interval {
                         if let Some(ref screen) = *screen {
                             Self::report_screen(&stats, screen);
-                            *last = Some(
-                                SystemTime::now(),
-                            );
+                            *last = Some(SystemTime::now());
                         }
                     }
 
                     // See how long we should take, update the next update time
                     next_update = min(
                         next_update,
-                        interval.checked_sub(elapsed).unwrap_or(interval)
+                        interval.checked_sub(elapsed).unwrap_or(interval),
                     );
                 }
 
                 // Check the stdout update time
                 if let Some(interval) = stdout_interval {
                     // Get the last stdout time
-                    let mut last = stdout_last.lock().unwrap();
+                    let mut last = stdout_last.lock();
 
                     // Get the number of elapsed seconds since the last report
-                    let elapsed = last.map(|last| last.elapsed().ok())
+                    let elapsed = last
+                        .map(|last| last.elapsed().ok())
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
                     // Report stats to the stdout
                     if last.is_none() || elapsed >= interval {
                         Self::report_stdout(&stats);
-                        *last = Some(
-                            SystemTime::now(),
-                        );
+                        *last = Some(SystemTime::now());
                     }
 
                     // See how long we should take, update the next update time
                     next_update = min(
                         next_update,
-                        interval.checked_sub(elapsed).unwrap_or(interval)
+                        interval.checked_sub(elapsed).unwrap_or(interval),
                     );
                 }
 
                 // Check the stats save update time
                 if let Some(interval) = save_interval {
                     // Get the last save time
-                    let mut last = save_last.lock().unwrap();
+                    let mut last = save_last.lock();
 
                     // Get the number of elapsed seconds since the last save
-                    let elapsed = last.map(|last| last.elapsed().ok())
+                    let elapsed = last
+                        .map(|last| last.elapsed().ok())
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
@@ -156,17 +156,17 @@ impl StatReporter {
                         let raw = stats.to_raw();
 
                         // Save the raw stats
-                        raw.save(save_path.as_ref().unwrap().as_path());
+                        if let Some(save_path) = &save_path {
+                            raw.save(save_path.as_path())
+                        }
 
-                        *last = Some(
-                            SystemTime::now(),
-                        );
+                        *last = Some(SystemTime::now());
                     }
 
                     // See how long we should take, update the next update time
                     next_update = min(
                         next_update,
-                        interval.checked_sub(elapsed).unwrap_or(interval)
+                        interval.checked_sub(elapsed).unwrap_or(interval),
                     );
                 }
 
@@ -178,7 +178,7 @@ impl StatReporter {
 
     /// Report the stats to the screen.
     fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>) {
-        *screen.lock().unwrap() = format!(
+        *screen.lock() = format!(
             "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet localhost 1234        \tin:\t{}\t{}",
             stats.pixels_human(),
             stats.pixels_sec_human(),
@@ -190,14 +190,21 @@ impl StatReporter {
 
     /// Report the stats to stdout.
     fn report_stdout(stats: &Arc<Stats>) {
-        println!("\
+        println!(
+            "\
                 {: <7} {: <15} {: <12}\n\
                 {: <7} {: <15} {: <12}\n\
                 {: <7} {: <15} {: <12}\
             ",
-            "STATS",   "Total:",                "Per sec:",
-            "Pixels:", stats.pixels_human(),     stats.pixels_sec_human(),
-            "Input:",  stats.bytes_read_human(), stats.bytes_read_sec_human(),
+            "STATS",
+            "Total:",
+            "Per sec:",
+            "Pixels:",
+            stats.pixels_human(),
+            stats.pixels_sec_human(),
+            "Input:",
+            stats.bytes_read_human(),
+            stats.bytes_read_sec_human(),
         );
     }
 }

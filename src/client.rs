@@ -1,22 +1,28 @@
-use std::io;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::Poll;
 
 use bytes::{BufMut, BytesMut};
-use futures::prelude::*;
+use futures::Stream;
 use pixelpwnr_render::Pixmap;
+use tokio::io::{AsyncRead, AsyncWrite};
 
-use cmd::{Cmd, CmdResult};
-use codec::Lines;
-use stats::Stats;
+use crate::cmd::{Cmd, CmdResult};
+use crate::codec::Lines;
+use crate::stats::Stats;
 
 /// The state for each connected client.
-pub struct Client {
+pub struct Client<'a, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// The TCP socket wrapped with the `Lines` codec, defined below.
     ///
     /// This handles sending and receiving data on the socket. When using
     /// `Lines`, we can work at the line level instead of having to manage the
     /// raw byte operations.
-    lines: Lines,
+    lines: Pin<&'a mut Lines<'a, T>>,
 
     /// A pixel map.
     pixmap: Arc<Pixmap>,
@@ -25,9 +31,12 @@ pub struct Client {
     stats: Arc<Stats>,
 }
 
-impl Client {
+impl<'a, T> Client<'a, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// Create a new instance of `Client`.
-    pub fn new(lines: Lines, pixmap: Arc<Pixmap>, stats: Arc<Stats>) -> Client {
+    pub fn new(lines: Pin<&'a mut Lines<'a, T>>, pixmap: Arc<Pixmap>, stats: Arc<Stats>) -> Self {
         Client {
             lines,
             pixmap,
@@ -40,14 +49,20 @@ impl Client {
     /// A new line is automatically appended to the response.
     ///
     /// This blocks until the written data is flushed to the client.
-    pub fn respond(&mut self, response: &[u8]) -> Result<(), io::Error> {
+    pub fn respond(
+        self: &mut Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        response: &[u8],
+    ) -> Result<(), ()> {
         // Write to the buffer
         self.lines.buffer(response);
         self.lines.buffer(b"\r\n");
 
         // Flush the write buffer to the socket
         // TODO: don't wait on this, flush in the background?
-        self.lines.poll_flush()?;
+        if let Poll::Pending = self.lines.as_mut().poll_flush(cx) {
+            return Err(());
+        }
 
         Ok(())
     }
@@ -57,8 +72,12 @@ impl Client {
     /// A new line is automatically appended to the response.
     ///
     /// This blocks until the written data is flushed to the client.
-    pub fn respond_str(&mut self, response: String) -> Result<(), io::Error> {
-        self.respond(response.as_bytes())
+    pub fn respond_str(
+        self: &mut Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        response: String,
+    ) -> Result<(), ()> {
+        self.respond(cx, response.as_bytes())
     }
 }
 
@@ -74,81 +93,85 @@ impl Client {
 /// 1) Receive messages on its message channel and write them to the socket.
 /// 2) Receive messages from the socket and broadcast them to all clients.
 ///
-impl Future for Client {
-    type Item = ();
-    type Error = io::Error;
+impl<'a, T> Future for Client<'a, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
+    type Output = String;
 
-    fn poll(&mut self) -> Poll<(), io::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<String> {
         // Read new lines from the socket
-        while let Async::Ready(line) = self.lines.poll()? {
-            if let Some(message) = line {
+        while let Poll::Ready(line) = self.lines.as_mut().poll_next(cx) {
+            if let Some(messages) = line {
                 // Get the input we're working with
-                let input = message.freeze();
 
-                // Decode the command to run
-                let cmd = match Cmd::decode(input) {
-                    Err(err) => {
-                        // Report the error to the client
-                        self.respond_str(format!("ERR {}", err))
-                            .expect("failed to flush write buffer");
+                for message in messages.into_iter() {
+                    let input = message.freeze();
 
-                        continue;
-                    },
-                    Ok(cmd) => cmd,
-                };
+                    // Decode the command to run
+                    let cmd = match Cmd::decode(input) {
+                        Err(err) => {
+                            // Report the error to the client
+                            self.respond_str(cx, format!("ERR {}", err))
+                                .expect("failed to flush write buffer");
 
-                // Invoke the command, and catch the result
-                let result = cmd.invoke(&self.pixmap, &self.stats);
+                            return Poll::Ready("Command decoding failed".to_string());
+                        }
+                        Ok(cmd) => cmd,
+                    };
 
-                // Do something with the result
-                match result {
-                    // Do nothing
-                    CmdResult::Ok => {},
+                    // Invoke the command, and catch the result
+                    let result = cmd.invoke(&self.pixmap, &self.stats);
 
-                    // Respond to the client
-                    CmdResult::Response(msg) => {
-                        // Create a bytes buffer with the message
-                        let mut bytes = BytesMut::with_capacity(msg.len());
-                        bytes.put_slice(msg.as_bytes());
+                    // Do something with the result
+                    match result {
+                        // Do nothing
+                        CmdResult::Ok => {}
 
-                        // Respond
-                        self.respond(&bytes)
-                            .expect("failed to flush write buffer");
-                    },
+                        // Respond to the client
+                        CmdResult::Response(msg) => {
+                            // Create a bytes buffer with the message
+                            let mut bytes = BytesMut::with_capacity(msg.len());
+                            bytes.put_slice(msg.as_bytes());
 
-                    // Report the error to the user
-                    CmdResult::ClientErr(err) => {
-                        // Report the error to the client
-                        self.respond_str(format!("ERR {}", err))
-                            .expect("failed to flush write buffer");
+                            // Respond
+                            self.respond(cx, &bytes)
+                                .expect("failed to flush write buffer");
+                        }
 
-                        // TODO: disconnect the client after sending
-                    },
+                        // Report the error to the user
+                        CmdResult::ClientErr(err) => {
+                            // Report the error to the client
+                            self.respond_str(cx, format!("ERR {}", err))
+                                .expect("failed to flush write buffer");
 
-                    // Report the error to the server
-                    CmdResult::ServerErr(err) => {
-                        // Show an error message in the console
-                        println!("Client error \"{}\" occurred, disconnecting...", err);
+                            return Poll::Ready(format!("Client error: {}", err));
+                        }
 
-                        // Disconnect the client
-                        return Ok(Async::Ready(()));
-                    },
+                        // Report the error to the server
+                        CmdResult::ServerErr(err) => {
+                            // Show an error message in the console
+                            println!("Client error \"{}\" occurred, disconnecting...", err);
 
-                    // Quit the connection
-                    CmdResult::Quit => return Ok(Async::Ready(())),
+                            // Disconnect the client
+                            return Poll::Ready(format!("Server error occured. {}", err));
+                        }
+
+                        // Quit the connection
+                        CmdResult::Quit => return Poll::Ready("Client quit".to_string()),
+                    }
                 }
             } else {
                 // EOF was reached. The remote client has disconnected. There is
                 // nothing more to do.
-                return Ok(Async::Ready(()));
+                return Poll::Ready("Eof was reached".to_string());
             }
         }
 
-        // As always, it is important to not just return `NotReady` without
-        // ensuring an inner future also returned `NotReady`.
-        //
-        // We know we got a `NotReady` from either `self.rx` or `self.lines`, so
-        // the contract is respected.
-        Ok(Async::NotReady)
+        // As always, it is important to not just return `Pending` without
+        // ensuring an inner future also returned `Pending`.
+        // Since we know for certain that we have received a `Poll::Pending`
+        // from `self.lines`, we can safely return `Poll::Pending`.
+        Poll::Pending
     }
 }

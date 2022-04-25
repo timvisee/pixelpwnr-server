@@ -1,8 +1,6 @@
-extern crate time;
-
 use std::fmt;
 
-use self::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The maximum number of ticks that may be remembered to use for calculations.
 /// You don't want too many ticks, as the calculation would possibly be
@@ -13,14 +11,14 @@ const TICKS_MAX: usize = 10;
 /// The minimum allowed interval between registered ticks.
 /// This prevents too many ticks from being collected in a short time frame,
 /// possibly making the result unreliable.
-const TICKS_MIN_INTERVAL_MICRO: u64 = 100_000;
+const TICKS_MIN_INTERVAL: Duration = Duration::from_micros(100_000);
 
 /// The maximum age of a registered tick.
 /// This prevents old and now incorrect data from affecting the calculation.
 /// If the tick has been registered longer ago than the specified age, it is
 /// dropped.
 /// This value is also the maximum period the calculated result is averaged at.
-const TICKS_MAX_AGE_MICRO: u64 = 2_500_000;
+const TICKS_MAX_AGE: Duration = Duration::from_micros(2_500_000);
 
 /// A monitor, that measures a cumulative value over time to report how much
 /// the value grows each second.
@@ -54,7 +52,7 @@ impl StatMonitor {
 
         // The difference between now and the last time must be large enough
         if let Some(last) = last {
-            if ((now - last).whole_microseconds() as u64) < TICKS_MIN_INTERVAL_MICRO {
+            if now.duration_since(last) < TICKS_MIN_INTERVAL {
                 return self.calculate();
             }
         }
@@ -87,11 +85,13 @@ impl StatMonitor {
             let old = self.ticks.last().unwrap().1;
 
             // If the tick is too old, truncate all ticks that are too old
-            if ((now - old).whole_microseconds() as u64) > TICKS_MAX_AGE_MICRO {
+            if now.duration_since(old) > TICKS_MAX_AGE {
                 // Find the truncation point and truncate
-                if let Some(pos) = self.ticks.iter().position(|&(_, time)| {
-                    (now - time).whole_microseconds() as u64 > TICKS_MAX_AGE_MICRO
-                }) {
+                if let Some(pos) = self
+                    .ticks
+                    .iter()
+                    .position(|&(_, time)| now.duration_since(time) > TICKS_MAX_AGE)
+                {
                     self.ticks.truncate(pos);
                 }
             }
@@ -117,7 +117,7 @@ impl StatMonitor {
 
         // Determine the difference in value and time
         let delta = (new.0 - old.0) as f64;
-        let passed = (new.1 - old.1).whole_microseconds() as f64;
+        let passed = new.1.duration_since(old.1).as_micros() as f64;
 
         // Return the approximate the value change each second
         Some(delta / passed * 1_000_000f64)

@@ -13,7 +13,7 @@ server in [Rust][rust].
 * GPU accelerated
 * Highly concurrent, to support many connections
 * Linux, Windows and macOS
-* ...
+* Optional binary PX command for reduced bandwidth requirements (enabled by default).
 
 ## Current problems
 In the current prototype version, the following main problems exist:
@@ -55,6 +55,19 @@ cargo build --release
 # Start using pixelpwnr-server
 ./target/release/pixelpwnr-server --help
 ```
+## The binary PX command
+This implementation adds a new command to the protocol, which is laid out as follows:
+
+```
+PBxyrgba
+```
+
+where:
+* `x` and `y` are Little-Endian u16 values describing the X and Y coordinate of the pixel to set.
+* `r`, `g`, `b` and `a` are single-byte values describing the R, G, B, and A components of the color to set the pixel to.
+* It is important to note that this command does _not_ end in a newline. Appending a newline simply causes the server to interpret that newline as an empty command (which is fine).
+
+If you wish to disable the binary pixel command, pass the `--no-default-features` flag to `cargo`
 
 ## Requirements
 * Rust (v1.31 or higher)

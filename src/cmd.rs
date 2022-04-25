@@ -2,8 +2,10 @@ use atoi::atoi;
 use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
-use app::{APP_NAME, APP_VERSION};
-use stats::Stats;
+use crate::{
+    codec::{PXB_CMD_SIZE, PXB_PREFIX},
+    stats::Stats,
+};
 
 /// A set of pixel commands a client might send.
 ///
@@ -37,11 +39,32 @@ pub enum Cmd {
 
 impl Cmd {
     /// Decode the command to run, from the given input bytes.
-    pub fn decode<'a>(input: Bytes) -> Result<Self, &'a str> {
+    pub fn decode<'a>(input_bytes: Bytes) -> Result<Self, &'a str> {
         // Iterate over input parts
-        let mut input = input
+        let mut input = input_bytes
             .split(|b| b == &b' ')
             .filter(|part| !part.is_empty());
+
+        // Binary pixel command short-circuit
+        if cfg!(feature = "binary-pixel-cmd")
+            && input_bytes.len() == PXB_CMD_SIZE
+            && input_bytes[..PXB_PREFIX.len()] == PXB_PREFIX
+        {
+            const OFF: usize = PXB_PREFIX.len();
+            let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
+            let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
+
+            let r = input_bytes[OFF + 4];
+            let g = input_bytes[OFF + 5];
+            let b = input_bytes[OFF + 6];
+            let a = input_bytes[OFF + 7];
+
+            return Ok(Cmd::SetPixel(
+                x as usize,
+                y as usize,
+                Color::from_rgba(r, g, b, a),
+            ));
+        }
 
         // Decode the command
         match input.next() {
@@ -50,36 +73,32 @@ impl Cmd {
                 b"PX" => {
                     // Get and parse coordinates
                     let (x, y) = (
-                        atoi(
-                            input.next().ok_or("missing x coordinate")?
-                        ).ok_or("invalid x coordinate")?,
-                        atoi(
-                            input.next().ok_or("missing y coordinate")?
-                        ).ok_or("invalid y coordinate")?,
+                        atoi(input.next().ok_or("missing x coordinate")?)
+                            .ok_or("invalid x coordinate")?,
+                        atoi(input.next().ok_or("missing y coordinate")?)
+                            .ok_or("invalid y coordinate")?,
                     );
 
                     // Get the color part, determine whether this is a get/set
                     // command
                     match input.next() {
                         // Color part found, set the pixel command
-                        // TODO: don't convert to a string here
-                        Some(color) => Ok(Cmd::SetPixel(
-                            x,
-                            y,
-                            Color::from_hex(&String::from_utf8_lossy(color))
-                                .map_err(|_| "invalid color value")?,
-                        )),
+                        Some(color) => {
+                            let color =
+                                Color::from_hex_raw(&color).map_err(|_| "invalid color value")?;
+                            Ok(Cmd::SetPixel(x, y, color))
+                        }
 
                         // No color part found, get the pixel color
-                        None => Ok(Cmd::GetPixel(x, y))
+                        None => Ok(Cmd::GetPixel(x, y)),
                     }
-                },
+                }
 
                 // Basic commands
                 b"SIZE" => Ok(Cmd::Size),
                 b"HELP" => Ok(Cmd::Help),
                 b"QUIT" => Ok(Cmd::Quit),
-
+                b"" => Ok(Cmd::None),
                 // Unknown command
                 _ => Err("unknown command, use HELP"),
             },
@@ -102,7 +121,7 @@ impl Cmd {
                 if let Err(err) = pixmap.set_pixel(x, y, color) {
                     return CmdResult::from_pixmap_err(err);
                 }
-            },
+            }
 
             // Get a pixel color from the pixel map
             Cmd::GetPixel(x, y) => {
@@ -113,10 +132,8 @@ impl Cmd {
                 };
 
                 // Send the response
-                return CmdResult::Response(
-                    format!("PX {} {} {}", x, y, color),
-                );
-            },
+                return CmdResult::Response(format!("PX {} {} {}", x, y, color));
+            }
 
             // Get the size of the screen
             Cmd::Size => {
@@ -124,10 +141,8 @@ impl Cmd {
                 let (x, y) = pixmap.dimentions();
 
                 // Send the response
-                return CmdResult::Response(
-                    format!("SIZE {} {}", x, y),
-                );
-            },
+                return CmdResult::Response(format!("SIZE {} {}", x, y));
+            }
 
             // Show help
             Cmd::Help => return CmdResult::Response(Self::help_list()),
@@ -136,7 +151,7 @@ impl Cmd {
             Cmd::Quit => return CmdResult::Quit,
 
             // Do nothing
-            Cmd::None => {},
+            Cmd::None => {}
         }
 
         // Everything went right
@@ -145,7 +160,8 @@ impl Cmd {
 
     /// Get a list of command help, to respond to a client.
     pub fn help_list() -> String {
-        format!("\
+        let mut help = format!(
+            "\
             HELP {} v{}\r\n\
             HELP Commands:\r\n\
             HELP - PX <x> <y> <RRGGBB[AA]>\r\n\
@@ -153,7 +169,16 @@ impl Cmd {
             HELP - SIZE         >>  SIZE <width> <height>\r\n\
             HELP - HELP         >>  HELP ...\r\n\
             HELP - QUIT\
-        ", APP_NAME, APP_VERSION)
+        ",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
+        );
+
+        if cfg!(feature = "binary-pixel-cmd") {
+            help.push_str("\r\nHELP - PBxyrgba (NO newline, x, y = 2 byte LE u16, r, g, b, a = single byte)");
+        }
+
+        help
     }
 }
 
