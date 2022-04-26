@@ -3,9 +3,11 @@ use std::task::Poll;
 use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
-use futures::Stream;
+use futures::Future;
+use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
 
+use crate::cmd::{Cmd, CmdResult};
 use crate::stats::Stats;
 
 /// The capacity of the read and write buffer in bytes.
@@ -48,13 +50,12 @@ pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
 /// send and receive values that represent entire lines. The `Lines` codec will
 /// handle the encoding and decoding as well as reading from and writing to the
 /// socket.
-#[derive(Debug)]
-pub struct Lines<'a, T>
+pub struct Lines<'sock, T>
 where
     T: AsyncRead + AsyncWrite,
 {
     /// The TCP socket.
-    socket: Pin<&'a mut T>,
+    socket: Pin<&'sock mut T>,
 
     /// Buffer used when reading from the socket. Data is not returned from
     /// this buffer until an entire line has been read.
@@ -65,19 +66,23 @@ where
 
     /// Server stats.
     stats: Arc<Stats>,
+
+    /// A pixel map.
+    pixmap: Arc<Pixmap>,
 }
 
-impl<'a, T> Lines<'a, T>
+impl<'sock, T> Lines<'sock, T>
 where
     T: AsyncRead + AsyncWrite,
 {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: Pin<&'a mut T>, stats: Arc<Stats>) -> Self {
+    pub fn new(socket: Pin<&'sock mut T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
             wr: BytesMut::with_capacity(BUF_SIZE),
             stats,
+            pixmap,
         }
     }
 
@@ -162,25 +167,20 @@ where
     }
 }
 
-impl<'a, T> Stream for Lines<'a, T>
+impl<'sock, T> Future for Lines<'sock, T>
 where
     T: AsyncRead + AsyncWrite,
 {
-    type Item = Vec<BytesMut>;
+    type Output = String;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        let mut lines = Vec::with_capacity(self.rd.len() / 8);
-
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         // Try to read any new data into the read buffer
         let fill_read_buf = self.as_mut().fill_read_buf(cx);
         let new_rd_len = self.rd.len();
 
         match fill_read_buf {
             // An error occured (most likely disconnection)
-            Poll::Ready(Err(_)) => return Poll::Ready(None),
+            Poll::Ready(Err(_)) => return Poll::Ready("Client disconnected".into()),
             Poll::Ready(Ok(_)) => {
                 if new_rd_len < 2 {
                     // If the buffer cannot possibly contain a command, it makes sense
@@ -196,7 +196,7 @@ where
             Poll::Pending => return Poll::Pending,
         }
 
-        loop {
+        let result = loop {
             let rd_len = self.rd.len();
 
             let is_binary_command = cfg!(feature = "binary-pixel-cmd")
@@ -204,9 +204,18 @@ where
                 && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
 
             // See if it's the specialized binary command
-            if is_binary_command && rd_len >= PXB_CMD_SIZE {
-                let line = self.rd.split_to(PXB_CMD_SIZE);
-                lines.push(line);
+            let command = if is_binary_command && rd_len >= PXB_CMD_SIZE {
+                let input_bytes = self.rd.split_to(PXB_CMD_SIZE);
+                const OFF: usize = PXB_PREFIX.len();
+                let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
+                let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
+
+                let r = input_bytes[OFF + 4];
+                let g = input_bytes[OFF + 5];
+                let b = input_bytes[OFF + 6];
+                let a = input_bytes[OFF + 7];
+
+                Cmd::SetPixel(x as usize, y as usize, Color::from_rgba(r, g, b, a))
             } else if !is_binary_command {
                 // Find the new line character
                 let pos = self
@@ -234,7 +243,14 @@ where
                     line.truncate(pos);
 
                     // Return the line
-                    lines.push(line)
+                    match Cmd::decode_line(line.freeze()) {
+                        Ok(cmd) => cmd,
+                        Err(e) => {
+                            // Report the error to the client
+                            self.buffer(&format!("ERR {}\r\n", e).as_bytes());
+                            break Err("Command decoding failed.".to_string());
+                        }
+                    }
                 } else if rd_len > LINE_MAX_LENGTH {
                     // If no line ending was found, and the buffer is larger than the
                     // maximum command length, disconnect
@@ -246,16 +262,59 @@ where
                     );
 
                     // Break the connection, by ending the lines stream
-                    return Poll::Ready(None);
+                    return Poll::Ready(format!("Line sent by client was too long"));
                 } else {
                     // Didn't find any more data to process
-                    break;
+                    break Ok(());
                 }
             } else {
-                break;
-            }
-        }
+                break Ok(());
+            };
 
-        Poll::Ready(Some(lines))
+            let result = command.invoke(&self.pixmap, &self.stats);
+            // Do something with the result
+            match result {
+                // Do nothing
+                CmdResult::Ok => {}
+
+                // Respond to the client
+                CmdResult::Response(msg) => {
+                    // Create a bytes buffer with the message
+                    self.buffer(msg.as_bytes());
+                }
+
+                // Report the error to the user
+                CmdResult::ClientErr(err) => {
+                    // Report the error to the client
+                    self.buffer(&format!("ERR {}\r\n", err).as_bytes());
+                    break Err("Client error".to_string());
+                }
+
+                // Report the error to the server
+                CmdResult::ServerErr(err) => {
+                    // Show an error message in the console
+                    println!("Client error \"{}\" occurred, disconnecting...", err);
+
+                    // Disconnect the client
+                    break Err(format!("Client error occured. {}", err));
+                }
+
+                // Quit the connection
+                CmdResult::Quit => break Err("Client quit".to_string()),
+            }
+        };
+
+        // This isn't used correctly: we probably need a (small) state machine
+        // to determine that we should keep transmitting until we have emptied
+        // our write buffer
+        let _ = self.poll_flush(cx);
+
+        match result {
+            Ok(_) => {
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+            Err(m) => Poll::Ready(m),
+        }
     }
 }

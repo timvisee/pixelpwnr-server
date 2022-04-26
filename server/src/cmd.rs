@@ -2,10 +2,7 @@ use atoi::atoi;
 use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
-use crate::{
-    codec::{PXB_CMD_SIZE, PXB_PREFIX},
-    stats::Stats,
-};
+use crate::stats::Stats;
 
 /// A set of pixel commands a client might send.
 ///
@@ -39,32 +36,11 @@ pub enum Cmd {
 
 impl Cmd {
     /// Decode the command to run, from the given input bytes.
-    pub fn decode<'a>(input_bytes: Bytes) -> Result<Self, &'a str> {
+    pub fn decode_line<'a>(input_bytes: Bytes) -> Result<Self, &'a str> {
         // Iterate over input parts
         let mut input = input_bytes
             .split(|b| b == &b' ')
             .filter(|part| !part.is_empty());
-
-        // Binary pixel command short-circuit
-        if cfg!(feature = "binary-pixel-cmd")
-            && input_bytes.len() == PXB_CMD_SIZE
-            && input_bytes[..PXB_PREFIX.len()] == PXB_PREFIX
-        {
-            const OFF: usize = PXB_PREFIX.len();
-            let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
-            let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
-
-            let r = input_bytes[OFF + 4];
-            let g = input_bytes[OFF + 5];
-            let b = input_bytes[OFF + 6];
-            let a = input_bytes[OFF + 7];
-
-            return Ok(Cmd::SetPixel(
-                x as usize,
-                y as usize,
-                Color::from_rgba(r, g, b, a),
-            ));
-        }
 
         // Decode the command
         match input.next() {
