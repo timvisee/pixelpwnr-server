@@ -2,8 +2,6 @@ use atoi::atoi;
 use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
-use crate::stats::Stats;
-
 /// A set of pixel commands a client might send.
 ///
 /// These commands may then be invoked on the pixel map state.
@@ -85,14 +83,13 @@ impl Cmd {
     }
 
     /// Invoke the command, and return the result.
-    pub fn invoke<'a>(self, pixmap: &'a Pixmap, stats: &Stats) -> CmdResult {
+    pub fn invoke<'a>(self, pixmap: &'a Pixmap) -> CmdResult {
         // Match the command, invoke the proper action
+        let mut is_set_pixel = false;
         match self {
             // Set the pixel on the pixel map
             Cmd::SetPixel(x, y, color) => {
-                // Update the pixel statistics
-                stats.inc_pixels();
-
+                is_set_pixel = true;
                 // Set the pixel
                 if let Err(err) = pixmap.set_pixel(x, y, color) {
                     return CmdResult::from_pixmap_err(err);
@@ -131,7 +128,7 @@ impl Cmd {
         }
 
         // Everything went right
-        CmdResult::Ok
+        CmdResult::Ok(is_set_pixel)
     }
 
     /// Get a list of command help, to respond to a client.
@@ -167,7 +164,9 @@ impl Cmd {
 /// or an error might have occurred.
 pub enum CmdResult {
     /// The command has been invoked successfully.
-    Ok,
+    ///
+    /// If the contained boolean is `true`, a pixel was updated
+    Ok(bool),
 
     /// The command has been invoked successfully, and the following response
     /// should be send to the client.
