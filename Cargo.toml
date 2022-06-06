@@ -7,7 +7,7 @@ edition = "2021"
 [lib]
 
 [dependencies]
-image = "0.20"
+image = "0.23"
 gfx = "0.18"
 gfx_text = "0.29"
 gfx_device_gl = "0.16"
