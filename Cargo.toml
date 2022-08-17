@@ -11,8 +11,7 @@ bytes = "1.1.0"
 clap = { version = "3.1", features = ["derive"] }
 futures = "0.3.21"
 number_prefix = "0.3"
-# pixelpwnr-render = { git = "https://github.com/timvisee/pixelpwnr-render.git" }
-pixelpwnr-render = { path = "../pixelpwnr-render" }
+pixelpwnr-render = { git = "https://github.com/timvisee/pixelpwnr-render.git" }
 serde = { version = "1.0", features = ["derive"]}
 serde_yaml = "0.8"
 tokio = { version = "1.17", features = ["net", "rt", "rt-multi-thread", "macros", "sync", "time"] }
