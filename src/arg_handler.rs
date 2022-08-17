@@ -7,7 +7,7 @@ use clap::Parser;
 #[derive(Parser)]
 pub struct Opts {
     /// The host to bind to
-    #[clap(short, long, default_value = "0.0.0.0:1337", alias = "bind")]
+    #[clap(long, default_value = "0.0.0.0:1337", alias = "bind")]
     pub host: SocketAddr,
 
     /// Canvas width (def: screen width)
@@ -62,6 +62,16 @@ pub struct Opts {
     /// Screen stats column spacing
     #[clap(long, alias = "stats-column-spacing", default_value = "20")]
     pub stats_col_spacing: i32,
+
+    /// The directory under which to save images.
+    #[clap(long, short)]
+    pub save_dir: Option<PathBuf>,
+
+    /// The interval at which to save the current frame, in seconds
+    ///
+    /// This value is only relevant if --save-dir is specified
+    #[clap(long, default_value = "60")]
+    pub save_interval: u64,
 }
 
 macro_rules! map_duration {
