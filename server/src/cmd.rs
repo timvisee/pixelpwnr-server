@@ -83,16 +83,20 @@ impl Cmd {
     }
 
     /// Invoke the command, and return the result.
-    pub fn invoke<'a>(self, pixmap: &'a Pixmap) -> CmdResult {
+    ///
+    /// pixel_set_count is a mutable reference to the amount of pixels
+    /// that have been set, and will be increased automatically when a pixel
+    /// is succesfully updated.
+    pub fn invoke<'a>(self, pixmap: &'a Pixmap, pixel_set_count: &mut usize) -> CmdResult {
         // Match the command, invoke the proper action
-        let mut is_set_pixel = false;
         match self {
             // Set the pixel on the pixel map
             Cmd::SetPixel(x, y, color) => {
-                is_set_pixel = true;
                 // Set the pixel
                 if let Err(err) = pixmap.set_pixel(x, y, color) {
                     return CmdResult::from_pixmap_err(err);
+                } else {
+                    *pixel_set_count += 1;
                 }
             }
 
@@ -128,7 +132,7 @@ impl Cmd {
         }
 
         // Everything went right
-        CmdResult::Ok(is_set_pixel)
+        CmdResult::Ok
     }
 
     /// Get a list of command help, to respond to a client.
@@ -164,9 +168,7 @@ impl Cmd {
 /// or an error might have occurred.
 pub enum CmdResult {
     /// The command has been invoked successfully.
-    ///
-    /// If the contained boolean is `true`, a pixel was updated
-    Ok(bool),
+    Ok,
 
     /// The command has been invoked successfully, and the following response
     /// should be send to the client.

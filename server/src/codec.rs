@@ -272,15 +272,11 @@ where
                 break Ok(());
             };
 
-            let result = command.invoke(&self.pixmap);
+            let result = command.invoke(&self.pixmap, &mut pixels_set);
             // Do something with the result
             match result {
                 // Do nothing
-                CmdResult::Ok(is_set_pixel) => {
-                    if is_set_pixel {
-                        pixels_set += 1
-                    }
-                }
+                CmdResult::Ok => {}
 
                 // Respond to the client
                 CmdResult::Response(msg) => {
