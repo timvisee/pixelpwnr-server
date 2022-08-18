@@ -1,5 +1,4 @@
 mod arg_handler;
-mod client;
 mod cmd;
 mod codec;
 mod stat_monitor;
@@ -20,7 +19,6 @@ use clap::StructOpt;
 use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpListener, TcpStream};
 
-use client::Client;
 use codec::Lines;
 use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
@@ -33,12 +31,14 @@ fn main() {
     let arg_handler = Opts::parse();
 
     // Build a stats manager, load persistent stats
-    let mut stats = Stats::new();
-    if let Some(path) = &arg_handler.stats_file {
-        if let Some(raw) = StatsRaw::load(path.as_path()) {
-            stats.from_raw(&raw);
-        }
-    }
+    let stats = arg_handler
+        .stats_file
+        .as_ref()
+        .map(|f| StatsRaw::load(f.as_path()))
+        .flatten()
+        .map(|s| Stats::from_raw(&s))
+        .unwrap_or(Stats::new());
+
     let stats = Arc::new(stats);
 
     let (width, height) = arg_handler.size();
@@ -154,11 +154,10 @@ fn handle_socket(mut socket: TcpStream, pixmap: Arc<Pixmap>, stats: Arc<Stats>) 
 
         // Wrap the socket with the Lines codec,
         // to interact with lines instead of raw bytes
-        let mut lines = Lines::new(socket, stats.clone());
-        let lines = Pin::new(&mut lines);
-        let connection = Client::new(lines, pixmap, stats);
+        let mut lines_val = Lines::new(socket, stats.clone(), pixmap);
+        let lines = Pin::new(&mut lines_val);
 
-        let result = connection.await;
+        let result = lines.await;
 
         // Print a disconnect message
         println!("A client disconnected (from: {}). Reason: {}", addr, result);
