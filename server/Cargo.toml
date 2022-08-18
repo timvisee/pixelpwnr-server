@@ -21,3 +21,6 @@ image = { version = "0.24", default-features = false, features = [ "png" ] }
 [features]
 binary-pixel-cmd = []
 default = ["binary-pixel-cmd"]
+
+[dev-dependencies]
+tokio-test = "0.4"
