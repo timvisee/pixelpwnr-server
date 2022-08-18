@@ -2,6 +2,19 @@
 name = "pixelpwnr-render"
 version = "0.1.0"
 authors = ["Tim Visée <timvisee@gmail.com>"]
+license = "GPL-3.0"
+readme = "../README.md"
+homepage = "https://timvisee.com/projects/pixelpwnr-server"
+repository = "https://github.com/timvisee/pixelpwnr-server"
+description = "Blazingly fast GPU accelerated pixelflut server"
+keywords = ["pixelflut", "pixelpwnr", "server", "gpu"]
+categories = [
+    "graphics",
+    "hardware-support",
+    "multimedia",
+    "rendering",
+    "visualization",
+]
 edition = "2021"
 
 [lib]
