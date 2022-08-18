@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use std::mem;
 use std::ptr;
 
 use crate::color::Color;
@@ -149,7 +148,11 @@ impl Pixmap {
         // faster resulting in insane performance gains. This unsafe bit of
         // code is desirable over safe code that is enormously slower.
         // The implementation below is memory safe.
-        unsafe { mem::transmute(self.as_slice()) }
+
+        let slice_u32 = self.as_slice();
+        let len = slice_u32.len() * 4;
+
+        unsafe { core::slice::from_raw_parts(slice_u32.as_ptr() as _, len) }
     }
 }
 
