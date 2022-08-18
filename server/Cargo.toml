@@ -21,6 +21,3 @@ image = "0.24"
 [features]
 binary-pixel-cmd = []
 default = ["binary-pixel-cmd"]
-
-[profile.release]
-lto = true

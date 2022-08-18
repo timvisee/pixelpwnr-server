@@ -3,3 +3,6 @@ members = [
     "./server",
     "./render",
 ]
+
+[profile.release]
+lto = true
