@@ -6,9 +6,8 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use self::number_prefix::{NumberPrefix, Prefixed, Standalone};
+use self::number_prefix::NumberPrefix::{self, Prefixed, Standalone};
 use serde::{Deserialize, Serialize};
-use serde_yaml;
 
 use crate::stat_monitor::StatMonitor;
 
