@@ -28,8 +28,11 @@ serde = { version = "1.0", features = ["derive"]}
 serde_yaml = "0.9"
 tokio = { version = "1.17", features = ["net", "rt", "rt-multi-thread", "macros", "sync", "time"] }
 parking_lot = "0.12.0"
-image = "0.24"
+image = { version = "0.24", default-features = false, features = [ "png" ] }
 
 [features]
 binary-pixel-cmd = []
 default = ["binary-pixel-cmd"]
+
+[dev-dependencies]
+tokio-test = "0.4"

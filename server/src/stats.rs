@@ -17,7 +17,6 @@ use crate::stat_monitor::StatMonitor;
 /// For example, this manager tracks how many pixels have been written by
 /// clients in total or in the last seconds. And how many bytes have been read
 /// from clients.
-#[derive(Debug)]
 pub struct Stats {
     /// The number of clients that are currently connected.
     clients: AtomicUsize,
@@ -121,19 +120,19 @@ impl Stats {
     }
 
     /// Increase the number of pixels that have been written to the screen by
-    /// one.
+    /// n.
     ///
     /// This method must be called by the logic chaining pixels in
     /// the server, to update the number of changed pixels.
     /// This method should not be invoked by something else to prevent
     /// poisoning the statistics.
-    pub fn inc_pixels(&self) {
-        self.pixels.fetch_add(1, Ordering::SeqCst);
+    pub fn inc_pixels_by_n(&self, n: usize) {
+        self.pixels.fetch_add(n, Ordering::Relaxed);
     }
 
     /// Get the total number of bytes that have been read from clients.
     pub fn bytes_read(&self) -> usize {
-        self.bytes_read.load(Ordering::Relaxed)
+        self.bytes_read.load(Ordering::SeqCst)
     }
 
     /// Get the total number of bytes that have been read from clients
@@ -200,14 +199,16 @@ impl Stats {
 
     /// Load data from the given raw stats object.
     /// This overwrites the current stats data.
-    pub fn from_raw(&mut self, raw: &StatsRaw) {
+    pub fn from_raw(raw: &StatsRaw) -> Self {
         // Store the values
-        self.pixels.store(raw.pixels, Ordering::SeqCst);
-        self.bytes_read.store(raw.bytes_read, Ordering::SeqCst);
 
-        // Reset the monitors
-        self.pixels_monitor.lock().reset();
-        self.bytes_read_monitor.lock().reset();
+        let mut me = Self::new();
+        me.pixels = AtomicUsize::new(raw.pixels);
+        me.bytes_read = AtomicUsize::new(raw.bytes_read);
+        me.pixels_monitor.lock().reset();
+        me.bytes_read_monitor.lock().reset();
+
+        me
     }
 
     /// Convert this data in a raw stats object.
