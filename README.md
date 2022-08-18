@@ -62,7 +62,7 @@ where:
 If you wish to disable the binary pixel command, pass the `--no-default-features` flag to `cargo`
 
 ## Requirements
-* Rust (v1.31 or higher)
+* Rust (MSRV v1.58.1 or higher)
 * Build essentials (Ubuntu package: `build-essential`)
 * `freetype2` development files (Ubuntu package: `libfreetype6-dev`)
 
