@@ -1,5 +1,3 @@
-Windows connectivity
-Make sure dead clients disconnect, connection timeout
 Single shared thread pool
 Customizable thread pool size
 Customizable stats format

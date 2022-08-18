@@ -1,0 +1,17 @@
+[package]
+name = "pixelpwnr-render"
+version = "0.1.0"
+authors = ["Tim Visée <timvisee@gmail.com>"]
+edition = "2021"
+
+[lib]
+
+[dependencies]
+gfx = "0.18"
+gfx_text = "0.29"
+gfx_device_gl = "0.16"
+glutin = "0.28"
+lazy_static = "1.4"
+parking_lot = "0.12.0"
+draw_state = "0.8"
+old_school_gfx_glutin_ext = "0.28"

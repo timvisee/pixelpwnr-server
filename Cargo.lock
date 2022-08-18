@@ -1275,7 +1275,6 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 [[package]]
 name = "pixelpwnr-render"
 version = "0.1.0"
-source = "git+https://github.com/timvisee/pixelpwnr-render.git#59fe627f04c0891af1eb5cc223796f97b676ceb6"
 dependencies = [
  "draw_state",
  "gfx",
