@@ -7,11 +7,13 @@ mod stat_reporter;
 mod stats;
 
 use std::{
+    path::PathBuf,
     pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
+    time::{Duration, SystemTime},
 };
 
 use clap::StructOpt;
@@ -49,6 +51,15 @@ fn main() {
         .enable_all()
         .build()
         .unwrap();
+
+    if let Some(dir) = arg_handler.save_dir.clone() {
+        let pixmap = pixmap.clone();
+        runtime.spawn(spawn_save_image(
+            dir,
+            pixmap,
+            Duration::from_secs(arg_handler.save_interval),
+        ));
+    }
 
     let net_running = Arc::new(AtomicBool::new(true));
 
@@ -92,6 +103,35 @@ async fn listen(listener: std::net::TcpListener, pixmap: Arc<Pixmap>, stats: Arc
             continue;
         };
         handle_socket(socket, pixmap_worker, stats_worker);
+    }
+}
+
+/// Save the current canvas at the current interval
+async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration) {
+    std::fs::create_dir_all(&dir).unwrap();
+
+    loop {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let mut path = dir.clone();
+        path.push(format!("{}.png", now));
+
+        let (width, height) = pixmap.dimensions();
+
+        let image_data = pixmap.as_bytes();
+
+        image::save_buffer(
+            path,
+            image_data,
+            width as u32,
+            height as u32,
+            image::ColorType::RGBA(8),
+        )
+        .unwrap();
+        tokio::time::sleep(interval).await;
     }
 }
 

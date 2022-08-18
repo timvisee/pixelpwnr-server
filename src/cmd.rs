@@ -138,7 +138,7 @@ impl Cmd {
             // Get the size of the screen
             Cmd::Size => {
                 // Get the size
-                let (x, y) = pixmap.dimentions();
+                let (x, y) = pixmap.dimensions();
 
                 // Send the response
                 return CmdResult::Response(format!("SIZE {} {}", x, y));
@@ -175,7 +175,9 @@ impl Cmd {
         );
 
         if cfg!(feature = "binary-pixel-cmd") {
-            help.push_str("\r\nHELP - PBxyrgba (NO newline, x, y = 2 byte LE u16, r, g, b, a = single byte)");
+            help.push_str(
+                "\r\nHELP - PBxyrgba (NO newline, x, y = 2 byte LE u16, r, g, b, a = single byte)",
+            );
         }
 
         help
