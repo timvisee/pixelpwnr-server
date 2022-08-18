@@ -282,6 +282,7 @@ where
                 CmdResult::Response(msg) => {
                     // Create a bytes buffer with the message
                     self.buffer(msg.as_bytes());
+                    self.buffer(b"\r\n");
                 }
 
                 // Report the error to the user
