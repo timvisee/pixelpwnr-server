@@ -85,8 +85,8 @@ impl Cmd {
     /// Invoke the command, and return the result.
     ///
     /// pixel_set_count is a mutable reference to the amount of pixels
-    /// that have been set, and will be increased automatically when a pixel
-    /// is succesfully updated.
+    /// that have been set, and will be incremented automatically when
+    /// if a pixel is updated successfully.
     pub fn invoke<'a>(self, pixmap: &'a Pixmap, pixel_set_count: &mut usize) -> CmdResult {
         // Match the command, invoke the proper action
         match self {
