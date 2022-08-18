@@ -26,13 +26,13 @@ git clone https://github.com/timvisee/pixelpwnr-server.git
 cd pixelpwnr-server
 
 # Install pixelpwnr server
-cargo install -f
+cargo install --path server -f
 
 # Start using pixelpwnr server
 pixelpwnr-server --help
 
 # or run it directly from Cargo
-cargo run --release -- --help
+cargo run --bin pixelpwnr-server --release -- --help
 ```
 
 Or just build it and invoke the binary directly (Linux/macOS):
@@ -80,7 +80,6 @@ under heavy load:
 
 ## Relevant projects
 * [pixelpwnr (client)][pixelpwnr]
-* [pixelpwnr-render (GPU rendering backend)][pixelpwnr-render]
 
 ## License
 This project is released under the GNU GPL-3.0 license.
@@ -91,6 +90,5 @@ Check out the [LICENSE](LICENSE) file for more information.
 [pixelflut]: https://cccgoe.de/wiki/Pixelflut
 [pixelflut-video]: https://vimeo.com/92827556/
 [pixelpwnr]: https://github.com/timvisee/pixelpwnr
-[pixelpwnr-render]: https://github.com/timvisee/pixelpwnr-render
 [rust]: https://www.rust-lang.org/
 [rustup]: https://rustup.rs/
