@@ -128,7 +128,7 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
             image_data,
             width as u32,
             height as u32,
-            image::ColorType::RGBA(8),
+            image::ColorType::Rgba8,
         )
         .unwrap();
         tokio::time::sleep(interval).await;
