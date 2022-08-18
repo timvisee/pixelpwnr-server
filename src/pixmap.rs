@@ -54,6 +54,16 @@ impl Pixmap {
         }
     }
 
+    /// Get the width of the pixel map.
+    pub fn width(&self) -> usize {
+        self.dimensions.0
+    }
+
+    /// Get the height of the pixel map.
+    pub fn height(&self) -> usize {
+        self.dimensions.1
+    }
+
     /// Get the dimensions of the pixel map.
     #[allow(dead_code)]
     pub fn dimensions(&self) -> (usize, usize) {
