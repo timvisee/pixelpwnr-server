@@ -87,7 +87,7 @@ impl<'a> Renderer<'a> {
         keep_running: Arc<AtomicBool>,
     ) {
         // Get the size of the canvas
-        let size = self.pixmap.dimentions();
+        let size = self.pixmap.dimensions();
 
         // Select a monitor for full screening
         // TODO: allow selecting a specific monitor
@@ -161,12 +161,12 @@ impl<'a> Renderer<'a> {
             out: main_color.clone(),
         };
 
-        let dimentions = (size.0 as f32, size.1 as f32);
+        let dimensions = (size.0 as f32, size.1 as f32);
         // Build the stats renderer
         self.stats
             .init(
                 factory.clone(),
-                dimentions,
+                dimensions,
                 main_color.clone(),
                 main_depth.clone(),
                 stats_size,
@@ -215,7 +215,7 @@ impl<'a> Renderer<'a> {
                 ..
             } = event
             {
-                let dimentions = (s.width as f32, s.height as f32);
+                let dimensions = (s.width as f32, s.height as f32);
                 // Update the main color and depth
                 window.update_gfx(&mut main_color, &mut main_depth);
 
@@ -223,7 +223,7 @@ impl<'a> Renderer<'a> {
                 window.update_gfx(&mut data.out, &mut data_depth);
 
                 // Update the stats text
-                self.stats.update_views(&window, dimentions);
+                self.stats.update_views(&window, dimensions);
             }
 
             // We don't want to re-render the whole frame each time someone moves their mouse, so let's

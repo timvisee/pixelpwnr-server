@@ -37,8 +37,8 @@ pub struct Pixmap {
     /// pixel consists of 4 bytes in a single u32 for each color channel.
     map: Vec<u32>,
 
-    /// Pixelmap dimentions, width and height
-    dimentions: (usize, usize),
+    /// Pixelmap dimensions, width and height
+    dimensions: (usize, usize),
 }
 
 impl Pixmap {
@@ -49,15 +49,15 @@ impl Pixmap {
             // fit each pixel
             map: vec![*DEFAULT_PIXEL; width * height],
 
-            // Set the dimentions
-            dimentions: (width, height),
+            // Set the dimensions
+            dimensions: (width, height),
         }
     }
 
-    /// Get the dimentions of the pixel map.
+    /// Get the dimensions of the pixel map.
     #[allow(dead_code)]
-    pub fn dimentions(&self) -> (usize, usize) {
-        self.dimentions
+    pub fn dimensions(&self) -> (usize, usize) {
+        self.dimensions
     }
 
     /// Get the pixel at the given coordinate, as color.
@@ -113,14 +113,14 @@ impl Pixmap {
     /// Get the index a pixel is at, for the given coordinate.
     fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr> {
         // Check pixel bounds
-        if x >= self.dimentions.0 {
+        if x >= self.dimensions.0 {
             return Err(PixmapErr::OutOfBound("x coordinate out of bound"));
-        } else if y >= self.dimentions.1 {
+        } else if y >= self.dimensions.1 {
             return Err(PixmapErr::OutOfBound("y coordinate out of bound"));
         }
 
         // Determine the index and return
-        Ok(y * self.dimentions.0 + x)
+        Ok(y * self.dimensions.0 + x)
     }
 
     /// Get the pixelmap data, as slice with the raw color value of each
