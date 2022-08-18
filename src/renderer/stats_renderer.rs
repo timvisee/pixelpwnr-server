@@ -71,8 +71,8 @@ pub struct StatsRenderer<F: Factory<R> + Clone> {
     /// A factory to build new model instances if required.
     factory: Option<F>,
 
-    /// The dimentions the rendering window has, used for text placement.
-    window_dimentions: Option<(f32, f32)>,
+    /// The dimensions the rendering window has, used for text placement.
+    window_dimensions: Option<(f32, f32)>,
 
     /// The depth stencil for background rendering.
     bg_depth: Option<DepthStencilView<R, DepthFormat>>,
@@ -98,7 +98,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
             text: Arc::new(Mutex::new(String::new())),
             renderer: None,
             factory: None,
-            window_dimentions: None,
+            window_dimensions: None,
             bg_depth: None,
             bg_pso: None,
             bg_slice: None,
@@ -110,7 +110,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     pub fn init(
         &mut self,
         mut factory: F,
-        window_dimentions: (f32, f32),
+        window_dimensions: (f32, f32),
         main_color: RenderTargetView<R, ColorFormat>,
         main_depth: DepthStencilView<R, DepthFormat>,
         font_size: u8,
@@ -118,8 +118,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         padding: i32,
         col_spacing: i32,
     ) -> Result<(), GfxTextError> {
-        // Set the window dimentions, offset and padding
-        self.window_dimentions = Some(window_dimentions);
+        // Set the window dimensions, offset and padding
+        self.window_dimensions = Some(window_dimensions);
         self.offset = offset;
         self.padding = padding;
         self.col_spacing = col_spacing;
@@ -212,8 +212,8 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         // Draw the background quad, if there are some bounds
         if bounds != (0f32, 0f32) {
             if self.bg_slice.is_some() && self.bg_pso.is_some() && self.bg_data.is_some() {
-                // Get the window dimentions
-                let win = self.window_dimentions.unwrap();
+                // Get the window dimensions
+                let win = self.window_dimensions.unwrap();
 
                 // Determine the position and size of the background quad
                 let w = bounds.0 / win.0 * 2f32;
@@ -347,21 +347,21 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         )
     }
 
-    /// Update the stats rendering view, and the window dimentions.
+    /// Update the stats rendering view, and the window dimensions.
     /// This should be called when the GL rendering window is resized.
     // TODO: also update the text view here
     pub fn update_views(
         &mut self,
         window: &WindowedContext<PossiblyCurrent>,
-        dimentions: (f32, f32),
+        dimensions: (f32, f32),
     ) {
         // Update the views
         if let Some(data) = self.bg_data.as_mut() {
             window.update_gfx(&mut data.out, self.bg_depth.as_mut().unwrap());
         }
 
-        // Update the window dimentions
-        self.window_dimentions = Some(dimentions);
+        // Update the window dimensions
+        self.window_dimensions = Some(dimensions);
     }
 }
 
