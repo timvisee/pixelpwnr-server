@@ -131,17 +131,16 @@ where
     /// The buffer is then filled with data from the socket with all the data
     /// that is available.
     ///
-    /// Bool indicates whether or not an error occured
-    fn fill_read_buf(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Result<(), ()>> {
+    /// If the return value is Poll::Ready, the result contains either `Ok(new_rd_size)` or
+    /// `Err(disconnect reason message)`.
+    #[inline(always)]
+    fn fill_read_buf(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<usize, ()>> {
         // Get the length of buffer contents
         let len = self.rd.len();
 
         // We've enough data to continue
         if len > BUF_THRESHOLD {
-            return Poll::Ready(Ok(()));
+            return Poll::Ready(Ok(len));
         }
 
         // Read data and try to fill the buffer, update the statistics
@@ -164,61 +163,13 @@ where
         self.stats.inc_bytes_read(amount);
 
         // We're done reading
-        return Poll::Ready(Ok(()));
+        return Poll::Ready(Ok(self.rd.len()));
     }
-}
 
-impl<'sock, T> Future for Lines<'sock, T>
-where
-    T: AsyncRead + AsyncWrite,
-{
-    type Output = String;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        // First try to write all we have left to write
-        let write_is_pending = if !self.wr.is_empty() {
-            match self.poll_write(cx).map_err(|_| "Socket write error") {
-                Poll::Ready(Ok(_)) => {
-                    // We've finished writing, do nothing
-                    false
-                }
-                Poll::Ready(Err(e)) => return Poll::Ready(e.to_string()),
-                Poll::Pending => true,
-            }
-        } else {
-            false
-        };
-
-        if !write_is_pending {
-            if let Some(reason) = &self.disconnecting {
-                return Poll::Ready(reason.clone());
-            }
-        }
-
-        // Try to read any new data into the read buffer
-        let fill_read_buf = self.as_mut().fill_read_buf(cx);
-        let new_rd_len = self.rd.len();
-
-        match fill_read_buf {
-            // An error occured (most likely disconnection)
-            Poll::Ready(Err(_)) => return Poll::Ready("Client disconnected".into()),
-            Poll::Ready(Ok(_)) => {
-                if new_rd_len < 2 {
-                    // If the buffer cannot possibly contain a command, it makes sense
-                    // to return `Poll::Pending`. However, this also means that we've now
-                    // created our own pending condition that does not have a waker set by
-                    // an underlying implementation. To avoid having to set that up, we simply
-                    // defer our waking to `fill_read_buf` (which in turn defers it to some tokio::io
-                    // impl) by waking our task immediately.
-                    cx.waker().wake_by_ref();
-                    return Poll::Pending;
-                }
-            }
-            Poll::Pending => return Poll::Pending,
-        }
-
-        let mut pixels_set = 0;
-        let is_disconnecting = loop {
+    #[inline(always)]
+    fn process_rx_buffer(&mut self, cx: &mut std::task::Context<'_>) -> Result<(), String> {
+        let mut pixels = 0;
+        let error_message = loop {
             let rd_len = self.rd.len();
 
             let is_binary_command = cfg!(feature = "binary-pixel-cmd")
@@ -289,7 +240,7 @@ where
                 break None;
             };
 
-            let result = command.invoke(&self.pixmap, &mut pixels_set);
+            let result = command.invoke(&self.pixmap, &mut pixels);
             // Do something with the result
             match result {
                 // Do nothing
@@ -327,14 +278,72 @@ where
 
         // Increase the amount of set pixels by the amount of pixel set commands
         // that we processed in this batch
-        self.stats.inc_pixels_by_n(pixels_set);
+        self.stats.inc_pixels_by_n(pixels);
 
-        if is_disconnecting.is_some() {
-            self.disconnecting = is_disconnecting;
+        if let Some(disconnect_message) = error_message {
+            Err(disconnect_message)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<'sock, T> Future for Lines<'sock, T>
+where
+    T: AsyncRead + AsyncWrite,
+{
+    type Output = String;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        // First try to write all we have left to write
+        let write_is_pending = if !self.wr.is_empty() {
+            match self.poll_write(cx).map_err(|_| "Socket write error") {
+                Poll::Ready(Ok(_)) => {
+                    // We've finished writing, do nothing
+                    false
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(e.to_string()),
+                Poll::Pending => true,
+            }
+        } else {
+            false
+        };
+
+        if !write_is_pending {
+            if let Some(reason) = &self.disconnecting {
+                return Poll::Ready(reason.clone());
+            }
+        }
+
+        // Try to read any new data into the read buffer
+        let fill_read_buf = self.fill_read_buf(cx);
+
+        match fill_read_buf {
+            // An error occured (most likely disconnection)
+            Poll::Ready(Err(_)) => return Poll::Ready("Client disconnected".into()),
+            Poll::Ready(Ok(new_rd_len)) => {
+                if new_rd_len < 2 {
+                    // If the buffer cannot possibly contain a command, it makes sense
+                    // to return `Poll::Pending`. However, this also means that we've now
+                    // created our own pending condition that does not have a waker set by
+                    // an underlying implementation. To avoid having to set that up, we simply
+                    // defer our waking to `fill_read_buf` (which in turn defers it to some tokio::io
+                    // impl) by waking our task immediately.
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+            }
+            Poll::Pending => return Poll::Pending,
+        }
+
+        let rx_process_result = self.process_rx_buffer(cx);
+
+        if let Err(disconnect_message) = rx_process_result {
+            self.disconnecting = Some(disconnect_message);
         }
 
         if write_is_pending {
-            // We're not blocking on any IO, so we have to re-wake 
+            // We're not blocking on any IO, so we have to re-wake
             // immediately
             cx.waker().wake_by_ref();
         }
