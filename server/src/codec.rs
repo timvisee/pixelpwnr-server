@@ -261,15 +261,6 @@ where
                     break Some(format!("Client error: {}", err));
                 }
 
-                // Report the error to the server
-                CmdResult::ServerErr(err) => {
-                    // Show an error message in the console
-                    println!("Client error \"{}\" occurred, disconnecting...", err);
-
-                    // Disconnect the client
-                    break Some(format!("Client induced error: {}", err));
-                }
-
                 // Quit the connection
                 CmdResult::Quit => {
                     break Some("Client sent QUIT".to_string());

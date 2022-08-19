@@ -94,7 +94,7 @@ impl Cmd {
             Cmd::SetPixel(x, y, color) => {
                 // Set the pixel
                 if let Err(err) = pixmap.set_pixel(x, y, color) {
-                    return CmdResult::from_pixmap_err(err);
+                    return err.into();
                 } else {
                     *pixel_set_count += 1;
                 }
@@ -104,7 +104,7 @@ impl Cmd {
             Cmd::GetPixel(x, y) => {
                 // Get the hexadecimal color value of a pixel
                 let color = match pixmap.pixel(x, y) {
-                    Err(err) => return CmdResult::from_pixmap_err(err),
+                    Err(err) => return err.into(),
                     Ok(color) => color.hex(),
                 };
 
@@ -178,17 +178,12 @@ pub enum CmdResult {
     /// clients input.
     ClientErr(String),
 
-    /// The following error occurred while invoking a command on the server.
-    ServerErr(String),
-
     /// The connection should be closed.
     Quit,
 }
 
-impl CmdResult {
-    /// Build a command result from the given pixmap error that has occurred
-    /// when invoking a command.
-    pub fn from_pixmap_err(err: PixmapErr) -> CmdResult {
+impl From<PixmapErr<'_>> for CmdResult {
+    fn from(err: PixmapErr) -> Self {
         match err {
             PixmapErr::OutOfBound(msg) => CmdResult::ClientErr(msg.into()),
         }
