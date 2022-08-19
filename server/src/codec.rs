@@ -151,7 +151,7 @@ where
         let amount = match self.socket.as_mut().poll_read(cx, &mut read_buf) {
             Poll::Ready(Ok(_)) => read_buf.filled().len(),
             Poll::Ready(Err(_)) => return Poll::Ready(Err(())),
-            _ => return Poll::Pending,
+            Poll::Pending => return Poll::Pending,
         };
 
         // poll_read returns Ok(0) if the other end has hung up/EOF has been reached
@@ -176,18 +176,23 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         // First try to write all we have left to write
-        if !self.wr.is_empty() {
+        let write_is_pending = if !self.wr.is_empty() {
             match self.poll_write(cx).map_err(|_| "Socket write error") {
                 Poll::Ready(Ok(_)) => {
                     // We've finished writing, do nothing
+                    false
                 }
                 Poll::Ready(Err(e)) => return Poll::Ready(e.to_string()),
-                Poll::Pending => return Poll::Pending,
+                Poll::Pending => true,
             }
-        }
+        } else {
+            false
+        };
 
-        if let Some(reason) = &self.disconnecting {
-            return Poll::Ready(reason.clone());
+        if !write_is_pending {
+            if let Some(reason) = &self.disconnecting {
+                return Poll::Ready(reason.clone());
+            }
         }
 
         // Try to read any new data into the read buffer
@@ -272,14 +277,10 @@ where
                     // If no line ending was found, and the buffer is larger than the
                     // maximum command length, disconnect
 
-                    // TODO: report this error to the client
-                    println!(
-                        "Client sent a line longer than {} characters, disconnecting",
-                        LINE_MAX_LENGTH,
-                    );
+                    self.buffer(b"ERR Line length >1024\r\n", cx);
 
                     // Break the connection, by ending the lines stream
-                    return Poll::Ready(format!("Line sent by client was too long"));
+                    break Some("Client line length too long".to_string());
                 } else {
                     // Didn't find any more data to process
                     break None;
@@ -313,8 +314,6 @@ where
                     // Show an error message in the console
                     println!("Client error \"{}\" occurred, disconnecting...", err);
 
-                    self.buffer(b"ERR Line length >1024\r\n", cx);
-
                     // Disconnect the client
                     break Some(format!("Client induced error: {}", err));
                 }
@@ -330,12 +329,16 @@ where
         // that we processed in this batch
         self.stats.inc_pixels_by_n(pixels_set);
 
-        if let Some(disconnect_reason) = is_disconnecting {
-            self.disconnecting = Some(disconnect_reason);
+        if is_disconnecting.is_some() {
+            self.disconnecting = is_disconnecting;
         }
 
-        // We're not blocking on any IO, so we can re-wake immediately
-        cx.waker().wake_by_ref();
+        if write_is_pending {
+            // We're not blocking on any IO, so we have to re-wake 
+            // immediately
+            cx.waker().wake_by_ref();
+        }
+
         Poll::Pending
     }
 }
