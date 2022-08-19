@@ -105,10 +105,11 @@ where
     }
 
     /// Flush the write buffer to the socket
-    pub fn poll_write(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<(), ()>> {
+    pub fn poll_write(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<(), &str>> {
         let Self { socket, wr, .. } = self;
 
         match socket.as_mut().poll_write(cx, wr) {
+            Poll::Ready(Ok(0)) => Poll::Ready(Err("Client disconnected")),
             Poll::Ready(Ok(size)) => {
                 let _ = wr.split_to(size);
                 if self.wr.is_empty() {
@@ -118,7 +119,7 @@ where
                     Poll::Pending
                 }
             }
-            Poll::Ready(Err(_)) => Poll::Ready(Err(())),
+            Poll::Ready(Err(_)) => Poll::Ready(Err("Socket error")),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -297,7 +298,7 @@ where
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         // First try to write all we have left to write
         let write_is_pending = if !self.wr.is_empty() {
-            match self.poll_write(cx).map_err(|_| "Socket write error") {
+            match self.poll_write(cx) {
                 Poll::Ready(Ok(_)) => {
                     // We've finished writing, do nothing
                     false
@@ -342,7 +343,7 @@ where
             self.disconnecting = Some(disconnect_message);
         }
 
-        if write_is_pending {
+        if !write_is_pending {
             // We're not blocking on any IO, so we have to re-wake
             // immediately
             cx.waker().wake_by_ref();
