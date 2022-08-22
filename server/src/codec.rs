@@ -1,3 +1,4 @@
+use std::ops::DerefMut;
 use std::sync::Arc;
 use std::task::Poll;
 use std::{mem::MaybeUninit, pin::Pin};
@@ -50,12 +51,13 @@ pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
 /// send and receive values that represent entire lines. The `Lines` codec will
 /// handle the encoding and decoding as well as reading from and writing to the
 /// socket.
-pub struct Lines<'sock, T>
+pub struct Lines<T>
 where
-    T: AsyncRead + AsyncWrite,
+    T: DerefMut + Unpin,
+    T::Target: AsyncRead + AsyncWrite + Unpin,
 {
     /// The TCP socket.
-    socket: Pin<&'sock mut T>,
+    socket: Pin<T>,
 
     /// Buffer used when reading from the socket. Data is not returned from
     /// this buffer until an entire line has been read.
@@ -69,20 +71,25 @@ where
 
     /// A pixel map.
     pixmap: Arc<Pixmap>,
+
+    /// This is `Some(Reason)` if this Lines is disconnecting
+    disconnecting: Option<String>,
 }
 
-impl<'sock, T> Lines<'sock, T>
+impl<T> Lines<T>
 where
-    T: AsyncRead + AsyncWrite,
+    T: DerefMut + Unpin,
+    T::Target: AsyncRead + AsyncWrite + Unpin,
 {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: Pin<&'sock mut T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>) -> Self {
+    pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
             wr: BytesMut::with_capacity(BUF_SIZE),
             stats,
             pixmap,
+            disconnecting: None,
         }
     }
 
@@ -90,36 +97,34 @@ where
     ///
     /// This writes the line to an internal buffer. Calls to `poll_flush` will
     /// attempt to flush this buffer to the socket.
-    pub fn buffer(&mut self, line: &[u8]) {
+    pub fn buffer(&mut self, line: &[u8], cx: &mut std::task::Context<'_>) {
         // Push the line onto the end of the write buffer.
         //
         // The `put` function is from the `BufMut` trait.
         self.wr.extend_from_slice(line);
+
+        // Wake the context so we can be polled again immediately
+        cx.waker().wake_by_ref();
     }
 
     /// Flush the write buffer to the socket
-    pub fn poll_flush(self: &mut Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<()> {
-        // As long as there is buffered data to write, try to write it.
-        while !self.wr.is_empty() {
-            // `try_nb` is kind of like `try_ready`, but for operations that
-            // return `io::Result` instead of `Async`.
-            //
-            // In the case of `io::Result`, an error of `WouldBlock` is
-            // equivalent to `Async::NotReady.
+    pub fn poll_write(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<(), &str>> {
+        let Self { socket, wr, .. } = self;
 
-            let len = self.wr.len();
-            let bytes = self.wr.split_to(len);
-
-            let socket = self.socket.as_mut();
-
-            if let Poll::Ready(Ok(bytes)) = socket.poll_write(cx, &bytes) {
-                bytes
-            } else {
-                return Poll::Pending;
-            };
+        match socket.as_mut().poll_write(cx, wr) {
+            Poll::Ready(Ok(0)) => Poll::Ready(Err("Client disconnected")),
+            Poll::Ready(Ok(size)) => {
+                let _ = wr.split_to(size);
+                if self.wr.is_empty() {
+                    Poll::Ready(Ok(()))
+                } else {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+            }
+            Poll::Ready(Err(_)) => Poll::Ready(Err("Socket error")),
+            Poll::Pending => Poll::Pending,
         }
-
-        Poll::Ready(())
     }
 
     /// Read data from the socket if the buffer isn't full enough,
@@ -130,17 +135,16 @@ where
     /// The buffer is then filled with data from the socket with all the data
     /// that is available.
     ///
-    /// Bool indicates whether or not an error occured
-    fn fill_read_buf(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Result<(), ()>> {
+    /// If the return value is Poll::Ready, the result contains either `Ok(new_rd_size)` or
+    /// `Err(disconnect reason message)`.
+    #[inline(always)]
+    fn fill_read_buf(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<usize, ()>> {
         // Get the length of buffer contents
         let len = self.rd.len();
 
         // We've enough data to continue
         if len > BUF_THRESHOLD {
-            return Poll::Ready(Ok(()));
+            return Poll::Ready(Ok(len));
         }
 
         // Read data and try to fill the buffer, update the statistics
@@ -150,7 +154,7 @@ where
         let amount = match self.socket.as_mut().poll_read(cx, &mut read_buf) {
             Poll::Ready(Ok(_)) => read_buf.filled().len(),
             Poll::Ready(Err(_)) => return Poll::Ready(Err(())),
-            _ => return Poll::Pending,
+            Poll::Pending => return Poll::Pending,
         };
 
         // poll_read returns Ok(0) if the other end has hung up/EOF has been reached
@@ -163,41 +167,14 @@ where
         self.stats.inc_bytes_read(amount);
 
         // We're done reading
-        return Poll::Ready(Ok(()));
+        return Poll::Ready(Ok(self.rd.len()));
     }
-}
 
-impl<'sock, T> Future for Lines<'sock, T>
-where
-    T: AsyncRead + AsyncWrite,
-{
-    type Output = String;
+    #[inline(always)]
+    fn process_rx_buffer(&mut self, cx: &mut std::task::Context<'_>) -> Result<(), String> {
+        let mut pixels = 0;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        // Try to read any new data into the read buffer
-        let fill_read_buf = self.as_mut().fill_read_buf(cx);
-        let new_rd_len = self.rd.len();
-
-        match fill_read_buf {
-            // An error occured (most likely disconnection)
-            Poll::Ready(Err(_)) => return Poll::Ready("Client disconnected".into()),
-            Poll::Ready(Ok(_)) => {
-                if new_rd_len < 2 {
-                    // If the buffer cannot possibly contain a command, it makes sense
-                    // to return `Poll::Pending`. However, this also means that we've now
-                    // created our own pending condition that does not have a waker set by
-                    // an underlying implementation. To avoid having to set that up, we simply
-                    // defer our waking to `fill_read_buf` (which in turn defers it to some tokio::io
-                    // impl) by waking our task immediately.
-                    cx.waker().wake_by_ref();
-                    return Poll::Pending;
-                }
-            }
-            Poll::Pending => return Poll::Pending,
-        }
-
-        let mut pixels_set = 0;
-        let result = loop {
+        let error_message = loop {
             let rd_len = self.rd.len();
 
             let is_binary_command = cfg!(feature = "binary-pixel-cmd")
@@ -248,31 +225,27 @@ where
                         Ok(cmd) => cmd,
                         Err(e) => {
                             // Report the error to the client
-                            self.buffer(&format!("ERR {}\r\n", e).as_bytes());
-                            break Err("Command decoding failed.".to_string());
+                            self.buffer(&format!("ERR {}\r\n", e).as_bytes(), cx);
+                            break Some("Command decoding failed".to_string());
                         }
                     }
                 } else if rd_len > LINE_MAX_LENGTH {
                     // If no line ending was found, and the buffer is larger than the
                     // maximum command length, disconnect
 
-                    // TODO: report this error to the client
-                    println!(
-                        "Client sent a line longer than {} characters, disconnecting",
-                        LINE_MAX_LENGTH,
-                    );
+                    self.buffer(b"ERR Line length >1024\r\n", cx);
 
                     // Break the connection, by ending the lines stream
-                    return Poll::Ready(format!("Line sent by client was too long"));
+                    break Some("Client line length too long".to_string());
                 } else {
                     // Didn't find any more data to process
-                    break Ok(());
+                    break None;
                 }
             } else {
-                break Ok(());
+                break None;
             };
 
-            let result = command.invoke(&self.pixmap, &mut pixels_set);
+            let result = command.invoke(&self.pixmap, &mut pixels);
             // Do something with the result
             match result {
                 // Do nothing
@@ -281,51 +254,98 @@ where
                 // Respond to the client
                 CmdResult::Response(msg) => {
                     // Create a bytes buffer with the message
-                    self.buffer(msg.as_bytes());
-                    self.buffer(b"\r\n");
+                    self.buffer(msg.as_bytes(), cx);
+                    self.buffer(b"\r\n", cx);
                 }
 
                 // Report the error to the user
                 CmdResult::ClientErr(err) => {
                     // Report the error to the client
-                    self.buffer(&format!("ERR {}\r\n", err).as_bytes());
-                    let _ = self.poll_flush(cx);
-                    break Err("Client error".to_string());
-                }
-
-                // Report the error to the server
-                CmdResult::ServerErr(err) => {
-                    // Show an error message in the console
-                    println!("Client error \"{}\" occurred, disconnecting...", err);
-
-                    self.buffer(b"ERR Line length >1024\r\n");
-                    let _ = self.poll_flush(cx);
-
-                    // Disconnect the client
-                    break Err(format!("Client error occured. {}", err));
+                    self.buffer(&format!("ERR {}\r\n", err).as_bytes(), cx);
+                    break Some(format!("Client error: {}", err));
                 }
 
                 // Quit the connection
-                CmdResult::Quit => break Err("Client quit".to_string()),
+                CmdResult::Quit => {
+                    break Some("Client sent QUIT".to_string());
+                }
             }
         };
 
         // Increase the amount of set pixels by the amount of pixel set commands
         // that we processed in this batch
-        self.stats.inc_pixels_by_n(pixels_set);
+        self.stats.inc_pixels_by_n(pixels);
 
-        // This isn't used correctly: we probably need a (small) state machine
-        // to determine that we should keep transmitting until we have emptied
-        // our write buffer
-        let _ = self.poll_flush(cx);
-
-        match result {
-            Ok(_) => {
-                cx.waker().wake_by_ref();
-                Poll::Pending
-            }
-            Err(m) => Poll::Ready(m),
+        if let Some(disconnect_message) = error_message {
+            Err(disconnect_message)
+        } else {
+            Ok(())
         }
+    }
+}
+
+impl<T> Future for Lines<T>
+where
+    T: DerefMut + Unpin,
+    T::Target: AsyncRead + AsyncWrite + Unpin,
+{
+    type Output = String;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        // First try to write all we have left to write
+        let write_is_pending = if !self.wr.is_empty() {
+            match self.poll_write(cx) {
+                Poll::Ready(Ok(_)) => {
+                    // We've finished writing, do nothing
+                    false
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(e.to_string()),
+                Poll::Pending => true,
+            }
+        } else {
+            false
+        };
+
+        if !write_is_pending {
+            if let Some(reason) = &self.disconnecting {
+                return Poll::Ready(reason.clone());
+            }
+        }
+
+        // Try to read any new data into the read buffer
+        let fill_read_buf = self.fill_read_buf(cx);
+
+        match fill_read_buf {
+            // An error occured (most likely disconnection)
+            Poll::Ready(Err(_)) => return Poll::Ready("Client disconnected".into()),
+            Poll::Ready(Ok(new_rd_len)) => {
+                if new_rd_len < 2 {
+                    // If the buffer cannot possibly contain a command, it makes sense
+                    // to return `Poll::Pending`. However, this also means that we've now
+                    // created our own pending condition that does not have a waker set by
+                    // an underlying implementation. To avoid having to set that up, we simply
+                    // defer our waking to `fill_read_buf` (which in turn defers it to some tokio::io
+                    // impl) by waking our task immediately.
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+            }
+            Poll::Pending => return Poll::Pending,
+        }
+
+        let rx_process_result = self.process_rx_buffer(cx);
+
+        if let Err(disconnect_message) = rx_process_result {
+            self.disconnecting = Some(disconnect_message);
+        }
+
+        if !write_is_pending {
+            // We're not blocking on any IO, so we have to re-wake
+            // immediately
+            cx.waker().wake_by_ref();
+        }
+
+        Poll::Pending
     }
 }
 
