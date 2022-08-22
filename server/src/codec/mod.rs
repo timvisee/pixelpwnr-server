@@ -1,7 +1,7 @@
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::task::Poll;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
@@ -16,12 +16,14 @@ use crate::stats::Stats;
 #[cfg(test)]
 mod test;
 
+/// Options for this Codec
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     pub rate_limit: Option<RateLimit>,
     pub allow_binary_cmd: bool,
 }
 
+/// A rate limit
 #[derive(Debug, Clone, Copy)]
 pub enum RateLimit {
     // A rate limit in bits per second
@@ -158,6 +160,14 @@ where
         }
     }
 
+    /// If we're currently not waiting for anything,
+    /// wait for `duration`.
+    fn try_wait_for(&mut self, duration: Duration) {
+        if self.rx_wait.is_none() {
+            self.rx_wait = Some(Box::pin(tokio::time::sleep(duration)));
+        }
+    }
+
     /// Read data from the socket if the buffer isn't full enough,
     /// and it's length reached the lower size threshold.
     ///
@@ -187,9 +197,8 @@ where
                     .min(BUF_SIZE - len);
 
                 let wait_dur =
-                    std::time::Duration::from_micros(((BUF_SIZE * 1_000_000) / bps).max(1) as u64);
-
-                self.rx_wait = Some(Box::pin(tokio::time::sleep(wait_dur)));
+                    Duration::from_nanos(((BUF_SIZE as u64 * 1_000_000_000) / bps as u64).max(1));
+                self.try_wait_for(wait_dur);
 
                 allowed
             }
@@ -365,6 +374,17 @@ where
             if let Some(reason) = &self.disconnecting {
                 return Poll::Ready(reason.clone());
             }
+            if let Some(sleep) = &mut self.rx_wait {
+                if let Poll::Pending = sleep.as_mut().poll(cx) {
+                    return Poll::Pending;
+                } else {
+                    self.rx_wait.take();
+                }
+            }
+        } else if write_is_pending && self.rx_wait.is_some() {
+            // If writes are currently pending and we have an rx wait
+            // time, we should skip RX and just return pending
+            return Poll::Pending;
         }
 
         // Try to read any new data into the read buffer
