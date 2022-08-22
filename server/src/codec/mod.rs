@@ -1,15 +1,20 @@
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::task::Poll;
+use std::time::Instant;
 use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
 use futures::Future;
 use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::time::Sleep;
 
 use crate::cmd::{Cmd, CmdResult};
 use crate::stats::Stats;
+
+#[cfg(test)]
+mod test;
 
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
@@ -86,6 +91,16 @@ where
 
     /// This is `Some(Reason)` if this Lines is disconnecting
     disconnecting: Option<String>,
+
+    /// Codec options
+    opts: CodecOptions,
+
+    /// A sleep that has to expire before we should
+    /// resume receiving
+    rx_wait: Option<Pin<Box<Sleep>>>,
+
+    /// The last time we filled up the RX buffer
+    last_refill_time: Instant,
 }
 
 impl<T> Lines<T>
@@ -94,7 +109,7 @@ where
     T::Target: AsyncRead + AsyncWrite + Unpin,
 {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>) -> Self {
+    pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
@@ -102,6 +117,9 @@ where
             stats,
             pixmap,
             disconnecting: None,
+            opts,
+            rx_wait: None,
+            last_refill_time: Instant::now(),
         }
     }
 
@@ -159,9 +177,31 @@ where
             return Poll::Ready(Ok(len));
         }
 
+        let read_len = match self.opts.rate_limit {
+            Some(RateLimit::BitsPerSecond { limit: bps }) => {
+                let duration_since_last_refill =
+                    Instant::now().duration_since(self.last_refill_time);
+                let allowed = ((duration_since_last_refill.as_secs_f32() * (bps as f32 / 8.0))
+                    as usize)
+                    .min(BUF_SIZE - len);
+
+                let wait_dur =
+                    std::time::Duration::from_micros(((BUF_SIZE * 1_000_000) / bps).max(1) as u64);
+
+                self.rx_wait = Some(Box::pin(tokio::time::sleep(wait_dur)));
+
+                allowed
+            }
+            None => BUF_SIZE - len,
+        };
+
+        if read_len == 0 {
+            return Poll::Ready(Ok(len));
+        }
+
         // Read data and try to fill the buffer, update the statistics
         let mut local_buf: [MaybeUninit<u8>; BUF_SIZE] = [MaybeUninit::uninit(); BUF_SIZE];
-        let mut read_buf = tokio::io::ReadBuf::uninit(&mut local_buf[..BUF_SIZE - len]);
+        let mut read_buf = tokio::io::ReadBuf::uninit(&mut local_buf[..read_len]);
 
         let amount = match self.socket.as_mut().poll_read(cx, &mut read_buf) {
             Poll::Ready(Ok(_)) => read_buf.filled().len(),
@@ -177,6 +217,8 @@ where
         self.rd.extend_from_slice(read_buf.filled());
 
         self.stats.inc_bytes_read(amount);
+
+        self.last_refill_time = Instant::now();
 
         // We're done reading
         return Poll::Ready(Ok(self.rd.len()));
@@ -359,35 +401,4 @@ where
 
         Poll::Pending
     }
-}
-
-#[tokio::test]
-async fn response_newline() {
-    let stats = Arc::new(Stats::new());
-    let pixmap = Arc::new(Pixmap::new(400, 800));
-
-    let mut test = tokio_test::io::Builder::new()
-        // Test all commands that require a response
-        .read(b"PX 16 16\r\n")
-        .write(b"PX 16 16 000000\r\n")
-        .read(b"SIZE\r\n")
-        .write(b"SIZE 400 800\r\n")
-        .read(b"HELP\r\n")
-        .write(format!("{}\r\n", Cmd::help_list()).as_bytes())
-        // Test different variations of newlines
-        .read(b"PX 16 16\n")
-        .write(b"PX 16 16 000000\r\n")
-        // Verify that adding a few whitespaces after the command doesn't make a difference
-        .read(b"PX 16 16                     \n")
-        .write(b"PX 16 16 000000\r\n")
-        // Using an out of bounds index should return an error
-        .read(b"PX 1000 0\r\n")
-        .write(b"ERR x coordinate out of bound\r\n")
-        .build();
-
-    let test = Pin::new(&mut test);
-
-    let lines = Lines::new(test, stats.clone(), pixmap.clone());
-
-    lines.await;
 }

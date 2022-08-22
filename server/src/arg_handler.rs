@@ -6,7 +6,7 @@ use clap::Parser;
 
 use crate::codec::{CodecOptions, RateLimit};
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 pub struct Opts {
     /// The host to bind to
     #[clap(long, default_value = "0.0.0.0:1337", alias = "bind")]
