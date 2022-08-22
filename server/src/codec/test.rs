@@ -1,6 +1,9 @@
 use super::*;
 
-const CODEC_OPTS: CodecOptions = CodecOptions { rate_limit: None };
+const CODEC_OPTS: CodecOptions = CodecOptions {
+    rate_limit: None,
+    allow_binary_cmd: true,
+};
 
 #[tokio::test]
 async fn response_newline() {
@@ -14,7 +17,7 @@ async fn response_newline() {
         .read(b"SIZE\r\n")
         .write(b"SIZE 400 800\r\n")
         .read(b"HELP\r\n")
-        .write(format!("{}\r\n", Cmd::help_list()).as_bytes())
+        .write(format!("{}\r\n", Cmd::help_list(&CODEC_OPTS)).as_bytes())
         // Test different variations of newlines
         .read(b"PX 16 16\n")
         .write(b"PX 16 16 000000\r\n")

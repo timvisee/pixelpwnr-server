@@ -48,7 +48,11 @@ cargo build --release
 ./target/release/pixelpwnr-server --help
 ```
 ## The binary PX command
-This implementation adds a new command to the protocol, which is laid out as follows:
+
+This implementation adds a new command to the protocol. It is enabled if the `--binary` flag is passed to `pixelflut-server` when
+running the exectuable.
+
+The command is laid out as follows:
 
 ```
 PBxyrgba
@@ -58,8 +62,6 @@ where:
 * `x` and `y` are Little-Endian u16 values describing the X and Y coordinate of the pixel to set.
 * `r`, `g`, `b` and `a` are single-byte values describing the R, G, B, and A components of the color to set the pixel to.
 * It is important to note that this command does _not_ end in a newline. Appending a newline simply causes the server to interpret that newline as an empty command (which is fine).
-
-If you wish to disable the binary pixel command, pass the `--no-default-features` flag to `cargo`
 
 ## Requirements
 * Rust (MSRV v1.58.1 or higher)

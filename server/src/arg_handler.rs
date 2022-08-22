@@ -79,6 +79,10 @@ pub struct Opts {
     /// allowed to send data to the server, in bits per second. Default is unlimited.
     #[clap(long)]
     pub bw_limit: Option<usize>,
+
+    /// Enable binary commands
+    #[clap(long)]
+    pub binary: bool,
 }
 
 macro_rules! map_duration {
@@ -139,6 +143,7 @@ impl From<Opts> for CodecOptions {
             rate_limit: opts
                 .bw_limit
                 .map(|bps| RateLimit::BitsPerSecond { limit: bps }),
+            allow_binary_cmd: opts.binary,
         }
     }
 }

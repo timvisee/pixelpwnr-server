@@ -19,6 +19,7 @@ mod test;
 #[derive(Debug, Clone, Copy)]
 pub struct CodecOptions {
     pub rate_limit: Option<RateLimit>,
+    pub allow_binary_cmd: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -231,7 +232,7 @@ where
         let error_message = loop {
             let rd_len = self.rd.len();
 
-            let is_binary_command = cfg!(feature = "binary-pixel-cmd")
+            let is_binary_command = self.opts.allow_binary_cmd
                 && rd_len >= PXB_PREFIX.len()
                 && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
 
@@ -299,7 +300,7 @@ where
                 break None;
             };
 
-            let result = command.invoke(&self.pixmap, &mut pixels);
+            let result = command.invoke(&self.pixmap, &mut pixels, &self.opts);
             // Do something with the result
             match result {
                 // Do nothing
