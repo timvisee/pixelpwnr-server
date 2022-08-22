@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use clap::Parser;
 
+use crate::codec::{CodecOptions, RateLimit};
+
 #[derive(Parser)]
 pub struct Opts {
     /// The host to bind to
@@ -72,6 +74,11 @@ pub struct Opts {
     /// This value is only relevant if --save-dir is specified
     #[clap(long, default_value = "60")]
     pub save_interval: u64,
+
+    /// The maximum bandwidth at which a single client is
+    /// allowed to send data to the server, in bits per second. Default is unlimited.
+    #[clap(long)]
+    pub bw_limit: Option<usize>,
 }
 
 macro_rules! map_duration {
@@ -123,5 +130,15 @@ impl Opts {
                 .parse()
                 .expect("Invalid Y offset for stats"),
         )
+    }
+}
+
+impl From<Opts> for CodecOptions {
+    fn from(opts: Opts) -> Self {
+        CodecOptions {
+            rate_limit: opts
+                .bw_limit
+                .map(|bps| RateLimit::BitsPerSecond { limit: bps }),
+        }
     }
 }

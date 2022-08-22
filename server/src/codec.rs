@@ -11,6 +11,18 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use crate::cmd::{Cmd, CmdResult};
 use crate::stats::Stats;
 
+#[derive(Debug, Clone, Copy)]
+pub struct CodecOptions {
+    pub rate_limit: Option<RateLimit>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RateLimit {
+    // A rate limit in bits per second
+    BitsPerSecond { limit: usize },
+    // Pixels { pps: usize },
+}
+
 /// The capacity of the read and write buffer in bytes.
 const BUF_SIZE: usize = 64_000;
 
