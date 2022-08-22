@@ -1,3 +1,5 @@
+use tokio_test::io::Builder;
+
 use super::*;
 
 const CODEC_OPTS: CodecOptions = CodecOptions {
@@ -5,12 +7,23 @@ const CODEC_OPTS: CodecOptions = CodecOptions {
     allow_binary_cmd: true,
 };
 
-#[tokio::test]
-async fn response_newline() {
+async fn run<T>(lines: T, opts: Option<CodecOptions>)
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     let stats = Arc::new(Stats::new());
     let pixmap = Arc::new(Pixmap::new(400, 800));
 
-    let mut test = tokio_test::io::Builder::new()
+    let lines = Box::pin(lines);
+
+    let lines = Lines::new(lines, stats, pixmap, opts.unwrap_or(CODEC_OPTS));
+
+    lines.await;
+}
+
+#[tokio::test]
+async fn response_newline() {
+    let test = Builder::new()
         // Test all commands that require a response
         .read(b"PX 16 16\r\n")
         .write(b"PX 16 16 000000\r\n")
@@ -29,9 +42,34 @@ async fn response_newline() {
         .write(b"ERR x coordinate out of bound\r\n")
         .build();
 
-    let test = Pin::new(&mut test);
+    run(test, None).await;
+}
 
-    let lines = Lines::new(test, stats.clone(), pixmap.clone(), CODEC_OPTS);
+#[tokio::test]
+async fn binary_command() {
+    let test = Builder::new()
+        // Verify the size
+        .read(&[b'P', b'B', 5, 0, 5, 0, 0xAB, 0xCD, 0xEF, 0xFF])
+        .read(b"PX 5 5\n")
+        .write(b"PX 5 5 ABCDEF\r\n")
+        .build();
 
-    lines.await;
+    run(test, None).await;
+}
+
+#[tokio::test]
+async fn binary_command_with_binopt() {
+    let codec_opts = Some(CodecOptions {
+        allow_binary_cmd: false,
+        rate_limit: None,
+    });
+
+    let test = Builder::new()
+        // Note: we need the `\n` so that the program will detect that a command has
+        // been passed in, as binary commands are supposed to be disabled.
+        .read(&[b'P', b'B', 5, 0, 5, 0, 0xAB, 0xCD, 0xEF, 0xFF, b'\n'])
+        .write(b"ERR")
+        .build();
+
+    run(test, codec_opts).await;
 }
