@@ -2,7 +2,7 @@ use atoi::atoi;
 use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
-use crate::codec::CodecOptions;
+use crate::codec::{CodecOptions, RateLimit};
 
 /// A set of pixel commands a client might send.
 ///
@@ -163,7 +163,14 @@ impl Cmd {
             );
         }
 
-        help.push_str("            \r\nHELP - QUIT         >> (Disconnect)\r\n");
+        help.push_str("            \r\nHELP - QUIT         >> (Disconnect)");
+
+        if let Some(RateLimit::BitsPerSecond { limit }) = opts.rate_limit {
+            help.push_str(&format!(
+                "\r\nHELP - Input from a single client is limited to {} bits per second",
+                limit
+            ));
+        }
 
         help
     }
