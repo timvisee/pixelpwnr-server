@@ -49,8 +49,9 @@ cargo build --release
 ```
 ## The binary PX command
 
-This implementation adds a new command to the protocol. It is enabled if the `--binary` flag is passed to `pixelflut-server` when
-running the exectuable.
+This implementation adds a new command to the protocol. 
+
+This type of command is enabled by default, but can be disabled by passing the `--no-binary` flag to `pixelflut-server` when running the exectuable.
 
 The command is laid out as follows:
 

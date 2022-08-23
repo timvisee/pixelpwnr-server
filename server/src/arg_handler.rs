@@ -80,9 +80,9 @@ pub struct Opts {
     #[clap(long)]
     pub bw_limit: Option<usize>,
 
-    /// Enable binary commands
+    /// Disable binary commands
     #[clap(long)]
-    pub binary: bool,
+    pub no_binary: bool,
 }
 
 macro_rules! map_duration {
@@ -143,7 +143,7 @@ impl From<Opts> for CodecOptions {
             rate_limit: opts
                 .bw_limit
                 .map(|bps| RateLimit::BitsPerSecond { limit: bps }),
-            allow_binary_cmd: opts.binary,
+            allow_binary_cmd: !opts.no_binary,
         }
     }
 }
