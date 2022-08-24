@@ -34,39 +34,39 @@ impl Color {
     /// Construct a new color, from a raw color value.
     ///
     /// This color value defines the value of all 4 color channels.
-    pub fn new(value: u32) -> Self {
+    pub const fn new(value: u32) -> Self {
         Color { value }
     }
 
     /// Construct a new color, from RGB values.
     ///
     /// The alpha channel will be set to 0xFF.
-    pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
         Color::from_rgba(r, g, b, DEFAULT_ALPHA)
     }
 
     /// Construct a new color, from RGBA values.
-    pub fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+    pub const fn from_rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Color::new(r as u32 | (g as u32) << 8 | (b as u32) << 16 | (a as u32) << 24)
     }
 
     /// Get the red value, in the range `[0, 255)`.
-    pub fn red(&self) -> u32 {
+    pub const fn red(&self) -> u32 {
         self.value & 0xFF
     }
 
     /// Get green green value, in the range `[0, 255)`.
-    pub fn green(&self) -> u32 {
+    pub const fn green(&self) -> u32 {
         (self.value & 0xFF00) >> 8
     }
 
     /// Get the blue value, in the range `[0, 255)`.
-    pub fn blue(&self) -> u32 {
+    pub const fn blue(&self) -> u32 {
         (self.value & 0xFF0000) >> 16
     }
 
     /// Get the alpha value, in the range `[0, 255)`.
-    pub fn alpha(&self) -> u32 {
+    pub const fn alpha(&self) -> u32 {
         (self.value & 0xFF000000) >> 24
     }
 
@@ -142,12 +142,12 @@ impl Color {
     }
 
     /// A black color, with the default alpha.
-    pub fn black() -> Self {
+    pub const fn black() -> Self {
         Color::from_rgb(0, 0, 0)
     }
 
     /// Get the raw color value, as single u32.
-    pub fn to_raw(&self) -> u32 {
+    pub const fn to_raw(&self) -> u32 {
         self.value
     }
 

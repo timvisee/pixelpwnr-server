@@ -1,12 +1,6 @@
-use lazy_static::lazy_static;
 use std::ptr;
 
 use crate::color::Color;
-
-lazy_static! {
-    /// The default color value for each pixel
-    static ref DEFAULT_PIXEL: u32 = Color::black().to_raw();
-}
 
 /// A struct representing a pixelmap for pixelflut.
 ///
@@ -42,12 +36,14 @@ pub struct Pixmap {
 }
 
 impl Pixmap {
+    const DEFAULT_PIXEL: u32 = Color::black().to_raw();
+
     /// Construct a new
     pub fn new(width: usize, height: usize) -> Self {
         Pixmap {
             // Build a pixel map, with the default value and the proper sizeto
             // fit each pixel
-            map: vec![*DEFAULT_PIXEL; width * height],
+            map: vec![Self::DEFAULT_PIXEL; width * height],
 
             // Set the dimensions
             dimensions: (width, height),

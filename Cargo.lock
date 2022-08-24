@@ -1119,7 +1119,6 @@ dependencies = [
  "gfx_device_gl",
  "gfx_text",
  "glutin",
- "lazy_static",
  "old_school_gfx_glutin_ext",
  "parking_lot 0.12.1",
 ]
