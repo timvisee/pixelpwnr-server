@@ -31,8 +31,7 @@ parking_lot = "0.12.0"
 image = { version = "0.24", default-features = false, features = [ "png" ] }
 
 [features]
-binary-pixel-cmd = []
-default = ["binary-pixel-cmd"]
+default = [ ]
 
 [dev-dependencies]
 tokio-test = "0.4"
