@@ -17,6 +17,7 @@ use gfx::{self, *};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::window::{Fullscreen, WindowBuilder};
 use old_school_gfx_glutin_ext as gfx_glutin;
+use parking_lot::RwLock;
 
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
@@ -48,7 +49,7 @@ pub struct Renderer<'a> {
     title: &'a str,
 
     // Pixel map holding the screen data.
-    pixmap: Arc<Pixmap>,
+    pixmap: Arc<RwLock<Pixmap>>,
 
     // Used to render statistics on the canvas.
     stats: StatsRenderer<F>,
@@ -66,7 +67,7 @@ impl<'a> Renderer<'a> {
     ///
     /// The renderer window title should be given to `title`.
     /// The pixel map that is rendered should be given to `pixmap`.
-    pub fn new(title: &'a str, pixmap: Arc<Pixmap>) -> Renderer<'a> {
+    pub fn new(title: &'a str, pixmap: Arc<RwLock<Pixmap>>) -> Renderer<'a> {
         // Construct and return the renderer
         Renderer {
             title,
@@ -87,7 +88,7 @@ impl<'a> Renderer<'a> {
         keep_running: Arc<AtomicBool>,
     ) {
         // Get the size of the canvas
-        let size = self.pixmap.dimensions();
+        let size = self.pixmap.read().dimensions();
 
         // Select a monitor for full screening
         // TODO: allow selecting a specific monitor
@@ -149,7 +150,7 @@ impl<'a> Renderer<'a> {
 
         // Create a base image
         let base_image = (
-            Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
+            Renderer::create_texture(&mut factory, self.pixmap.write().as_bytes(), texture_kind),
             factory.create_sampler_linear(),
         );
 
@@ -230,7 +231,11 @@ impl<'a> Renderer<'a> {
             // put a time limit on it
             if Instant::now() > next_frame_time || event == Event::MainEventsCleared {
                 data.image = (
-                    Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
+                    Renderer::create_texture(
+                        &mut factory,
+                        self.pixmap.write().as_bytes(),
+                        texture_kind,
+                    ),
                     factory.create_sampler_linear(),
                 );
 

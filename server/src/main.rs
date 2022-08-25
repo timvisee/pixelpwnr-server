@@ -16,6 +16,7 @@ use std::{
 };
 
 use clap::StructOpt;
+use parking_lot::RwLock;
 use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -42,7 +43,7 @@ fn main() {
     let stats = Arc::new(stats);
 
     let (width, height) = arg_handler.size();
-    let pixmap = Arc::new(Pixmap::new(width, height));
+    let pixmap = Arc::new(RwLock::new(Pixmap::new(width, height)));
     println!("Canvas size: {}x{}", width, height);
 
     // Create a new runtime to be ran on a different (set of) OS threads
@@ -93,7 +94,7 @@ fn main() {
 
 async fn listen(
     listener: std::net::TcpListener,
-    pixmap: Arc<Pixmap>,
+    pixmap: Arc<RwLock<Pixmap>>,
     stats: Arc<Stats>,
     opts: CodecOptions,
 ) {
@@ -113,7 +114,7 @@ async fn listen(
 }
 
 /// Save the current canvas at the current interval
-async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration) {
+async fn spawn_save_image(dir: PathBuf, pixmap: Arc<RwLock<Pixmap>>, interval: Duration) {
     std::fs::create_dir_all(&dir).unwrap();
 
     loop {
@@ -125,18 +126,17 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
         let mut path = dir.clone();
         path.push(format!("{}.png", now));
 
-        let (width, height) = pixmap.dimensions();
-
-        let image_data = pixmap.as_bytes();
+        let (width, height) = pixmap.read().dimensions();
 
         image::save_buffer(
             path,
-            image_data,
+            &pixmap.write().as_bytes(),
             width as u32,
             height as u32,
             image::ColorType::Rgba8,
         )
         .unwrap();
+
         tokio::time::sleep(interval).await;
     }
 }
@@ -144,7 +144,7 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
 /// Spawn a new task with the given socket
 fn handle_socket(
     mut socket: TcpStream,
-    pixmap: Arc<Pixmap>,
+    pixmap: Arc<RwLock<Pixmap>>,
     stats: Arc<Stats>,
     opts: CodecOptions,
 ) {
@@ -181,7 +181,7 @@ fn handle_socket(
 /// Start the pixel map renderer.
 fn render(
     arg_handler: &Opts,
-    pixmap: Arc<Pixmap>,
+    pixmap: Arc<RwLock<Pixmap>>,
     stats: Arc<Stats>,
     net_running: Arc<AtomicBool>,
 ) {

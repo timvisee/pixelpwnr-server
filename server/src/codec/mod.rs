@@ -6,6 +6,7 @@ use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
 use futures::Future;
+use parking_lot::RwLock;
 use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::Sleep;
@@ -90,7 +91,7 @@ where
     stats: Arc<Stats>,
 
     /// A pixel map.
-    pixmap: Arc<Pixmap>,
+    pixmap: Arc<RwLock<Pixmap>>,
 
     /// This is `Some(Reason)` if this Lines is disconnecting
     disconnecting: Option<String>,
@@ -112,7 +113,12 @@ where
     T::Target: AsyncRead + AsyncWrite + Unpin,
 {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
+    pub fn new(
+        socket: Pin<T>,
+        stats: Arc<Stats>,
+        pixmap: Arc<RwLock<Pixmap>>,
+        opts: CodecOptions,
+    ) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
@@ -130,11 +136,11 @@ where
     ///
     /// This writes the line to an internal buffer. Calls to `poll_flush` will
     /// attempt to flush this buffer to the socket.
-    pub fn buffer(&mut self, line: &[u8], cx: &mut std::task::Context<'_>) {
+    pub fn buffer(wr_buf: &mut BytesMut, line: &[u8], cx: &mut std::task::Context<'_>) {
         // Push the line onto the end of the write buffer.
         //
         // The `put` function is from the `BufMut` trait.
-        self.wr.extend_from_slice(line);
+        wr_buf.extend_from_slice(line);
 
         // Wake the context so we can be polled again immediately
         cx.waker().wake_by_ref();
@@ -238,6 +244,8 @@ where
     fn process_rx_buffer(&mut self, cx: &mut std::task::Context<'_>) -> Result<(), String> {
         let mut pixels = 0;
 
+        let pixmap = self.pixmap.read();
+
         let error_message = loop {
             let rd_len = self.rd.len();
 
@@ -288,8 +296,9 @@ where
                     match Cmd::decode_line(line.freeze()) {
                         Ok(cmd) => cmd,
                         Err(e) => {
+                            drop(pixmap);
                             // Report the error to the client
-                            self.buffer(&format!("ERR {}\r\n", e).as_bytes(), cx);
+                            Self::buffer(&mut self.wr, &format!("ERR {}\r\n", e).as_bytes(), cx);
                             break Some("Command decoding failed".to_string());
                         }
                     }
@@ -297,7 +306,8 @@ where
                     // If no line ending was found, and the buffer is larger than the
                     // maximum command length, disconnect
 
-                    self.buffer(b"ERR Line length >1024\r\n", cx);
+                    drop(pixmap);
+                    Self::buffer(&mut self.wr, b"ERR Line length >1024\r\n", cx);
 
                     // Break the connection, by ending the lines stream
                     break Some("Client line length too long".to_string());
@@ -309,7 +319,7 @@ where
                 break None;
             };
 
-            let result = command.invoke(&self.pixmap, &mut pixels, &self.opts);
+            let result = command.invoke(&pixmap, &mut pixels, &self.opts);
             // Do something with the result
             match result {
                 // Do nothing
@@ -318,14 +328,15 @@ where
                 // Respond to the client
                 CmdResult::Response(msg) => {
                     // Create a bytes buffer with the message
-                    self.buffer(msg.as_bytes(), cx);
-                    self.buffer(b"\r\n", cx);
+                    Self::buffer(&mut self.wr, msg.as_bytes(), cx);
+                    Self::buffer(&mut self.wr, b"\r\n", cx);
                 }
 
                 // Report the error to the user
                 CmdResult::ClientErr(err) => {
                     // Report the error to the client
-                    self.buffer(&format!("ERR {}\r\n", err).as_bytes(), cx);
+                    drop(pixmap);
+                    Self::buffer(&mut self.wr, &format!("ERR {}\r\n", err).as_bytes(), cx);
                     break Some(format!("Client error: {}", err));
                 }
 
