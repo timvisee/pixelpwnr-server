@@ -26,7 +26,7 @@ number_prefix = "0.4"
 pixelpwnr-render = { version = "0.1", path = "../render" }
 serde = { version = "1.0", features = ["derive"]}
 serde_yaml = "0.9"
-tokio = { version = "1.17", features = ["net", "rt", "rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1.20", features = ["net", "rt", "rt-multi-thread", "macros", "sync", "time"] }
 parking_lot = "0.12.0"
 image = { version = "0.24", default-features = false, features = [ "png" ] }
 
