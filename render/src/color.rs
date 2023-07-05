@@ -136,7 +136,6 @@ impl Color {
     }
 
     /// Get the hexadecimal value of the color.
-    #[allow(dead_code)]
     pub fn hex(&self) -> String {
         format!("{:06X}", self.value.to_be() >> 8)
     }

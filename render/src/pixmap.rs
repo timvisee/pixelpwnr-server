@@ -75,13 +75,11 @@ impl Pixmap {
     }
 
     /// Get the dimensions of the pixel map.
-    #[allow(dead_code)]
     pub fn dimensions(&self) -> (usize, usize) {
         self.dimensions
     }
 
     /// Get the pixel at the given coordinate, as color.
-    #[allow(dead_code)]
     pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr> {
         let pixel_index = self.pixel_index(x, y)?;
         let pixel_value = self.map[pixel_index].load(Ordering::Relaxed);
