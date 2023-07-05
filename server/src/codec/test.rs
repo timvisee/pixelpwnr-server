@@ -12,7 +12,7 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     let stats = Arc::new(Stats::new());
-    let pixmap = Arc::new(RwLock::new(Pixmap::new(400, 800)));
+    let pixmap = Arc::new(Pixmap::new(400, 800));
 
     let lines = Box::pin(lines);
 

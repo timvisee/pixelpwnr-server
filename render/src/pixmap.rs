@@ -35,6 +35,21 @@ pub struct Pixmap {
     dimensions: (usize, usize),
 }
 
+impl Clone for Pixmap {
+    fn clone(&self) -> Self {
+        let map = self
+            .map
+            .iter()
+            .map(|v| AtomicU32::new(v.load(Ordering::Relaxed)))
+            .collect();
+
+        Self {
+            map,
+            dimensions: self.dimensions.clone(),
+        }
+    }
+}
+
 impl Pixmap {
     const DEFAULT_PIXEL: u32 = Color::black().to_raw();
 
@@ -106,7 +121,7 @@ impl Pixmap {
     ///
     /// This data may be used to send to the GPU, as raw texture buffer, for
     /// rendering.
-    pub fn as_bytes<'me>(&'me mut self) -> &'me [u8] {
+    pub fn as_bytes<'me>(&'me mut self) -> &[u8] {
         let map = &self.map;
 
         let len = map.len() * 4;
@@ -123,6 +138,9 @@ impl Pixmap {
         // `ptr` points to `len` u32s, and that has the same size as
         // `(mem::size_of::<u32>()/mem::size_of::<u8>) * len` = `4 * len`, so
         // turning it into a &[u8] of that length is valid.
+        //
+        // A correctly aligned [u32] will most likely also constitute a correctly
+        // aligned [u8]
         //
         // Because we are borrowing `self` for 'me (by means of a mutable borrow),
         // we can safely create an immutable slice of the memory that we're

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use parking_lot::RwLock;
 use pixelpwnr_render::color::Color;
 use pixelpwnr_render::pixmap::Pixmap;
 use pixelpwnr_render::renderer::Renderer;
@@ -16,7 +15,7 @@ pub fn main() {
         .unwrap();
 
     // Build the renderer
-    let renderer = Renderer::new("pixelpwnr-render", Arc::new(RwLock::new(pixmap)));
+    let renderer = Renderer::new("pixelpwnr-render", Arc::new(pixmap));
 
     // Run
     renderer.run_default();

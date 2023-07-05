@@ -17,7 +17,6 @@ use gfx::{self, *};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::window::{Fullscreen, WindowBuilder};
 use old_school_gfx_glutin_ext as gfx_glutin;
-use parking_lot::RwLock;
 
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
@@ -49,7 +48,7 @@ pub struct Renderer<'a> {
     title: &'a str,
 
     // Pixel map holding the screen data.
-    pixmap: Arc<RwLock<Pixmap>>,
+    pixmap: Arc<Pixmap>,
 
     // Used to render statistics on the canvas.
     stats: StatsRenderer<F>,
@@ -67,7 +66,7 @@ impl<'a> Renderer<'a> {
     ///
     /// The renderer window title should be given to `title`.
     /// The pixel map that is rendered should be given to `pixmap`.
-    pub fn new(title: &'a str, pixmap: Arc<RwLock<Pixmap>>) -> Renderer<'a> {
+    pub fn new(title: &'a str, pixmap: Arc<Pixmap>) -> Renderer<'a> {
         // Construct and return the renderer
         Renderer {
             title,
@@ -88,7 +87,7 @@ impl<'a> Renderer<'a> {
         keep_running: Arc<AtomicBool>,
     ) {
         // Get the size of the canvas
-        let size = self.pixmap.read().dimensions();
+        let size = self.pixmap.dimensions();
 
         // Select a monitor for full screening
         // TODO: allow selecting a specific monitor
@@ -148,9 +147,12 @@ impl<'a> Renderer<'a> {
         // Define the texture kind
         let texture_kind = Kind::D2(size.0 as u16, size.1 as u16, AaMode::Single);
 
+        // Create a clone of the pixel map
+        let mut pixmap = (*self.pixmap).clone();
+
         // Create a base image
         let base_image = (
-            Renderer::create_texture(&mut factory, self.pixmap.write().as_bytes(), texture_kind),
+            Renderer::create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
             factory.create_sampler_linear(),
         );
 
@@ -230,12 +232,10 @@ impl<'a> Renderer<'a> {
             // We don't want to re-render the whole frame each time someone moves their mouse, so let's
             // put a time limit on it
             if Instant::now() > next_frame_time || event == Event::MainEventsCleared {
+                let mut pixmap = (*self.pixmap).clone();
+
                 data.image = (
-                    Renderer::create_texture(
-                        &mut factory,
-                        self.pixmap.write().as_bytes(),
-                        texture_kind,
-                    ),
+                    Renderer::create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
                     factory.create_sampler_linear(),
                 );
 

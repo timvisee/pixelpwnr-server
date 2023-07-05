@@ -6,7 +6,6 @@ use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
 use futures::Future;
-use parking_lot::RwLock;
 use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::Sleep;
@@ -91,7 +90,7 @@ where
     stats: Arc<Stats>,
 
     /// A pixel map.
-    pixmap: Arc<RwLock<Pixmap>>,
+    pixmap: Arc<Pixmap>,
 
     /// This is `Some(Reason)` if this Lines is disconnecting
     disconnecting: Option<String>,
@@ -113,12 +112,7 @@ where
     T::Target: AsyncRead + AsyncWrite + Unpin,
 {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(
-        socket: Pin<T>,
-        stats: Arc<Stats>,
-        pixmap: Arc<RwLock<Pixmap>>,
-        opts: CodecOptions,
-    ) -> Self {
+    pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
         Lines {
             socket,
             rd: BytesMut::with_capacity(BUF_SIZE),
@@ -244,7 +238,7 @@ where
     fn process_rx_buffer(&mut self, cx: &mut std::task::Context<'_>) -> Result<(), String> {
         let mut pixels = 0;
 
-        let pixmap = self.pixmap.read();
+        let pixmap = &self.pixmap;
 
         let error_message = loop {
             let rd_len = self.rd.len();
