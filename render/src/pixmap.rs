@@ -22,9 +22,6 @@ use crate::color::Color;
 /// on some systems.
 ///
 /// More info: https://stackoverflow.com/a/5002256/1000145
-///
-/// Important: this data structure is considered unsafe, but is perfectly
-/// usable for pixelflut applications.
 #[repr(align(4))]
 pub struct Pixmap {
     /// A map with a raw color value for each pixel in the map, where each
@@ -149,9 +146,6 @@ impl Pixmap {
         slice
     }
 }
-
-unsafe impl Send for Pixmap {}
-unsafe impl Sync for Pixmap {}
 
 /// An error representation for pixel map operations.
 #[derive(Debug)]
