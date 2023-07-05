@@ -130,11 +130,11 @@ where
     ///
     /// This writes the line to an internal buffer. Calls to `poll_flush` will
     /// attempt to flush this buffer to the socket.
-    pub fn buffer(wr_buf: &mut BytesMut, line: &[u8], cx: &mut std::task::Context<'_>) {
+    pub fn buffer(&mut self, line: &[u8], cx: &mut std::task::Context<'_>) {
         // Push the line onto the end of the write buffer.
         //
         // The `put` function is from the `BufMut` trait.
-        wr_buf.extend_from_slice(line);
+        self.wr.extend_from_slice(line);
 
         // Wake the context so we can be polled again immediately
         cx.waker().wake_by_ref();
@@ -238,8 +238,6 @@ where
     fn process_rx_buffer(&mut self, cx: &mut std::task::Context<'_>) -> Result<(), String> {
         let mut pixels = 0;
 
-        let pixmap = &self.pixmap;
-
         let error_message = loop {
             let rd_len = self.rd.len();
 
@@ -290,9 +288,8 @@ where
                     match Cmd::decode_line(line.freeze()) {
                         Ok(cmd) => cmd,
                         Err(e) => {
-                            drop(pixmap);
                             // Report the error to the client
-                            Self::buffer(&mut self.wr, &format!("ERR {}\r\n", e).as_bytes(), cx);
+                            self.buffer(&format!("ERR {}\r\n", e).as_bytes(), cx);
                             break Some("Command decoding failed".to_string());
                         }
                     }
@@ -300,8 +297,7 @@ where
                     // If no line ending was found, and the buffer is larger than the
                     // maximum command length, disconnect
 
-                    drop(pixmap);
-                    Self::buffer(&mut self.wr, b"ERR Line length >1024\r\n", cx);
+                    self.buffer(b"ERR Line length >1024\r\n", cx);
 
                     // Break the connection, by ending the lines stream
                     break Some("Client line length too long".to_string());
@@ -313,7 +309,7 @@ where
                 break None;
             };
 
-            let result = command.invoke(&pixmap, &mut pixels, &self.opts);
+            let result = command.invoke(&self.pixmap, &mut pixels, &self.opts);
             // Do something with the result
             match result {
                 // Do nothing
@@ -322,15 +318,14 @@ where
                 // Respond to the client
                 CmdResult::Response(msg) => {
                     // Create a bytes buffer with the message
-                    Self::buffer(&mut self.wr, msg.as_bytes(), cx);
-                    Self::buffer(&mut self.wr, b"\r\n", cx);
+                    self.buffer(msg.as_bytes(), cx);
+                    self.buffer(b"\r\n", cx);
                 }
 
                 // Report the error to the user
                 CmdResult::ClientErr(err) => {
                     // Report the error to the client
-                    drop(pixmap);
-                    Self::buffer(&mut self.wr, &format!("ERR {}\r\n", err).as_bytes(), cx);
+                    self.buffer(&format!("ERR {}\r\n", err).as_bytes(), cx);
                     break Some(format!("Client error: {}", err));
                 }
 
