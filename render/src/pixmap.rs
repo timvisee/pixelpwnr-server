@@ -92,6 +92,9 @@ impl Pixmap {
     pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
         let pixel_index = self.pixel_index(x, y)?;
 
+        // A data race can occur here: if two separate threads update the pixel at the same time,
+        // the result of one of them will be discarded. This is an acceptable loss as it is unlikely
+        // and fixing it is really bad for performance.
         let mut current_color = Color::new(self.map[pixel_index].load(Ordering::Relaxed));
         current_color.blend(color);
         self.map[pixel_index].store(current_color.to_raw(), Ordering::Relaxed);
