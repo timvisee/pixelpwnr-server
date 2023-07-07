@@ -127,16 +127,17 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
 
         let (width, height) = pixmap.dimensions();
 
-        let image_data = pixmap.as_bytes();
+        let mut pixmap = (*pixmap).clone();
 
         image::save_buffer(
             path,
-            image_data,
+            pixmap.as_bytes(),
             width as u32,
             height as u32,
             image::ColorType::Rgba8,
         )
         .unwrap();
+
         tokio::time::sleep(interval).await;
     }
 }

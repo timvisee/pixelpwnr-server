@@ -147,9 +147,12 @@ impl<'a> Renderer<'a> {
         // Define the texture kind
         let texture_kind = Kind::D2(size.0 as u16, size.1 as u16, AaMode::Single);
 
+        // Create a clone of the pixel map
+        let mut pixmap = (*self.pixmap).clone();
+
         // Create a base image
         let base_image = (
-            Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
+            Renderer::create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
             factory.create_sampler_linear(),
         );
 
@@ -229,8 +232,10 @@ impl<'a> Renderer<'a> {
             // We don't want to re-render the whole frame each time someone moves their mouse, so let's
             // put a time limit on it
             if Instant::now() > next_frame_time || event == Event::MainEventsCleared {
+                let mut pixmap = (*self.pixmap).clone();
+
                 data.image = (
-                    Renderer::create_texture(&mut factory, self.pixmap.as_bytes(), texture_kind),
+                    Renderer::create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
                     factory.create_sampler_linear(),
                 );
 
