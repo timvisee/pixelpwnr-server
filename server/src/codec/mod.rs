@@ -33,7 +33,7 @@ pub enum RateLimit {
 }
 
 /// The capacity of the read and write buffer in bytes.
-const BUF_SIZE: usize = 64_000;
+const BUF_SIZE: usize = 1_024_000;
 
 /// The threshold length on which to fill the buffer again in bytes.
 ///
