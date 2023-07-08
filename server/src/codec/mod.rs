@@ -116,7 +116,7 @@ where
     pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
         Lines {
             socket,
-            rd: PipeBuf::with_capacity(BUF_SIZE),
+            rd: PipeBuf::with_fixed_capacity(BUF_SIZE),
             wr: BytesMut::with_capacity(BUF_SIZE),
             stats,
             pixmap,
