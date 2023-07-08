@@ -8,6 +8,7 @@ use crate::codec::{CodecOptions, RateLimit};
 /// These commands may then be invoked on the pixel map state.
 /// A command might get or set the color of a pixel, or it
 /// might request help.
+#[derive(Copy, Clone)]
 pub enum Cmd {
     /// Get the color of a pixel.
     ///

@@ -25,6 +25,9 @@ use stats::{Stats, StatsRaw};
 
 use crate::arg_handler::Opts;
 
+mod synths;
+pub use synths::{sync_synthetic_client, tokio_synthetic_client};
+
 // TODO: use some constant for new lines
 
 fn main() {
@@ -77,11 +80,17 @@ fn main() {
     let net_stats = stats.clone();
     let net_running_2 = net_running.clone();
     let opts = arg_handler.clone().into();
+
+    for _ in 0..16 {
+        sync_synthetic_client(pixmap.clone(), stats.clone(), opts);
+    }
+
     let tokio_runtime = std::thread::spawn(move || {
         runtime.block_on(async move {
-            for _ in 0..16 {
-                synthetic_client(net_pixmap.clone(), net_stats.clone(), opts);
-            }
+            // for _ in 0..16 {
+            //     tokio_synthetic_client(net_pixmap.clone(), net_stats.clone(), opts);
+            // }
+
             listen(listener, net_pixmap, net_stats, opts).await;
             net_running_2.store(false, Ordering::Relaxed);
         })
@@ -179,87 +188,6 @@ fn handle_socket(
 
         // Decreasde the client connections number
         disconnect_stats.dec_clients();
-    });
-}
-
-fn synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: CodecOptions) {
-    use std::io::Error;
-    use std::task::{Context, Poll};
-
-    let mut buffer = Vec::new();
-
-    for x in 0..800u16 {
-        for y in 0..600u16 {
-            buffer.extend_from_slice(b"PB");
-            buffer.extend_from_slice(&x.to_le_bytes());
-            buffer.extend_from_slice(&y.to_le_bytes());
-            buffer.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
-        }
-    }
-
-    struct RepeatWriter {
-        cursor: usize,
-        buffer: Vec<u8>,
-    }
-
-    impl tokio::io::AsyncRead for RepeatWriter {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            _: &mut Context<'_>,
-            buf: &mut tokio::io::ReadBuf<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            assert!(buf.filled().len() == 0);
-
-            let mut left_to_write = buf.capacity();
-
-            while left_to_write != 0 {
-                let cursor = self.cursor;
-                let to_write = &self.buffer[cursor..];
-
-                let to_write_len = left_to_write.min(self.buffer.len() - cursor);
-
-                buf.put_slice(&to_write[..to_write_len]);
-                self.as_mut().cursor = (cursor + to_write_len) % self.buffer.len();
-
-                left_to_write -= to_write_len;
-            }
-
-            Poll::Ready(Ok(()))
-        }
-    }
-
-    impl tokio::io::AsyncWrite for RepeatWriter {
-        fn poll_write(
-            self: Pin<&mut Self>,
-            _: &mut Context<'_>,
-            buf: &[u8],
-        ) -> Poll<Result<usize, Error>> {
-            println!("{}", String::from_utf8_lossy(buf));
-            Poll::Ready(Ok(buf.len()))
-        }
-
-        fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Error>> {
-            Poll::Ready(Ok(()))
-        }
-
-        fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Error>> {
-            Poll::Ready(Ok(()))
-        }
-    }
-
-    let mut repeat_writer = RepeatWriter { cursor: 0, buffer };
-
-    tokio::spawn(async move {
-        let socket = Pin::new(&mut repeat_writer);
-
-        // Wrap the socket with the Lines codec,
-        // to interact with lines instead of raw bytes
-        let mut lines_val = Lines::new(socket, stats.clone(), pixmap, opts);
-        let lines = Pin::new(&mut lines_val);
-
-        let result = lines.await;
-
-        println!("{result}");
     });
 }
 

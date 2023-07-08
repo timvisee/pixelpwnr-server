@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use bytes::BytesMut;
 use futures::Future;
-use pipebuf::PipeBuf;
+use pipebuf::{PBufRd, PipeBuf};
 use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::Sleep;
@@ -72,13 +72,9 @@ pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
 /// send and receive values that represent entire lines. The `Lines` codec will
 /// handle the encoding and decoding as well as reading from and writing to the
 /// socket.
-pub struct Lines<T>
-where
-    T: DerefMut + Unpin,
-    T::Target: AsyncRead + AsyncWrite + Unpin,
-{
+pub struct Lines<T> {
     /// The TCP socket.
-    socket: Pin<T>,
+    socket: T,
 
     /// Buffer used when reading from the socket. Data is not returned from
     /// this buffer until an entire line has been read.
@@ -107,13 +103,9 @@ where
     last_refill_time: Instant,
 }
 
-impl<T> Lines<T>
-where
-    T: DerefMut + Unpin,
-    T::Target: AsyncRead + AsyncWrite + Unpin,
-{
+impl<T> Lines<T> {
     /// Create a new `Lines` codec backed by the socket
-    pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
+    pub fn new(socket: T, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
         Lines {
             socket,
             rd: PipeBuf::with_fixed_capacity(BUF_SIZE),
@@ -127,20 +119,151 @@ where
         }
     }
 
-    /// Buffer a line.
-    ///
-    /// This writes the line to an internal buffer. Calls to `poll_flush` will
-    /// attempt to flush this buffer to the socket.
-    pub fn buffer(&mut self, line: &[u8], cx: &mut std::task::Context<'_>) {
-        // Push the line onto the end of the write buffer.
-        //
-        // The `put` function is from the `BufMut` trait.
-        self.wr.extend_from_slice(line);
+    #[inline(always)]
+    fn process_rx_buffer<BufferOutput>(
+        code_opts: &CodecOptions,
+        stats: &Stats,
+        pixmap: &Pixmap,
+        mut rd: PBufRd,
+        mut buffer_output: BufferOutput,
+    ) -> Result<(), String>
+    where
+        BufferOutput: FnMut(&[u8]),
+    {
+        let mut pixels = 0;
 
-        // Wake the context so we can be polled again immediately
-        cx.waker().wake_by_ref();
+        let error_message = loop {
+            let rd_len = rd.len();
+
+            let is_binary_command = code_opts.allow_binary_cmd
+                && rd_len >= PXB_PREFIX.len()
+                && &rd.data()[..PXB_PREFIX.len()] == PXB_PREFIX;
+
+            // See if it's the specialized binary command
+            let command = if is_binary_command && rd_len >= PXB_CMD_SIZE {
+                let input_bytes = &rd.data()[..PXB_CMD_SIZE];
+
+                const OFF: usize = PXB_PREFIX.len();
+                let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
+                let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
+
+                let r = input_bytes[OFF + 4];
+                let g = input_bytes[OFF + 5];
+                let b = input_bytes[OFF + 6];
+                let a = input_bytes[OFF + 7];
+
+                rd.consume(PXB_CMD_SIZE);
+
+                Cmd::SetPixel(x as usize, y as usize, Color::from_rgba(r, g, b, a))
+            } else if !is_binary_command {
+                // Find the new line character
+                let pos = rd
+                    .data()
+                    .iter()
+                    .take(LINE_MAX_LENGTH)
+                    .position(|b| *b == b'\n' || *b == b'\r');
+
+                // Get the line, return it
+                if let Some(pos) = pos {
+                    // Find how many line ending chars this line ends with
+                    let mut newlines = 1;
+                    match rd.data().get(pos + 1) {
+                        Some(b) => match *b {
+                            b'\n' | b'\r' => newlines = 2,
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+
+                    // Pull the line of the read buffer
+                    let line = &rd.data()[..pos];
+
+                    // Return the line
+                    let output = match Cmd::decode_line(line) {
+                        Ok(cmd) => cmd,
+                        Err(e) => {
+                            // Report the error to the client
+                            buffer_output(&format!("ERR {}\r\n", e).as_bytes());
+                            break Some("Command decoding failed".to_string());
+                        }
+                    };
+
+                    rd.consume(pos + newlines);
+
+                    output
+                } else if rd_len > LINE_MAX_LENGTH {
+                    // If no line ending was found, and the buffer is larger than the
+                    // maximum command length, disconnect
+
+                    buffer_output(b"ERR Line length >1024\r\n");
+
+                    // Break the connection, by ending the lines stream
+                    break Some("Client line length too long".to_string());
+                } else {
+                    // Didn't find any more data to process
+                    break None;
+                }
+            } else {
+                break None;
+            };
+
+            let result = command.invoke(pixmap, &mut pixels, &code_opts);
+            // Do something with the result
+            match result {
+                // Do nothing
+                CmdResult::Ok => {}
+
+                // Respond to the client
+                CmdResult::Response(msg) => {
+                    // Create a bytes buffer with the message
+                    buffer_output(msg.as_bytes());
+                    buffer_output(b"\r\n");
+                }
+
+                // Report the error to the user
+                CmdResult::ClientErr(err) => {
+                    // Report the error to the client
+                    buffer_output(&format!("ERR {}\r\n", err).as_bytes());
+                    break Some(format!("Client error: {}", err));
+                }
+
+                // Quit the connection
+                CmdResult::Quit => {
+                    break Some("Client sent QUIT".to_string());
+                }
+            }
+        };
+
+        // Increase the amount of set pixels by the amount of pixel set commands
+        // that we processed in this batch
+        stats.inc_pixels_by_n(pixels);
+
+        if let Some(disconnect_message) = error_message {
+            Err(disconnect_message)
+        } else {
+            Ok(())
+        }
     }
+}
 
+impl Lines<&[Cmd]> {
+    pub fn blast(self) {
+        loop {
+            let mut pixels = 0;
+            self.socket.iter().for_each(|cmd| {
+                cmd.invoke(&self.pixmap, &mut pixels, &self.opts);
+            });
+            self.stats.inc_pixels_by_n(pixels);
+            self.stats.inc_bytes_read(pixels * PXB_CMD_SIZE);
+        }
+    }
+}
+
+impl<T> Lines<Pin<T>>
+where
+    T: DerefMut + Unpin,
+    T::Target: AsyncRead + AsyncWrite + Unpin,
+{
     /// Flush the write buffer to the socket
     pub fn poll_write(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<(), &str>> {
         let Self { socket, wr, .. } = self;
@@ -237,128 +360,9 @@ where
         // We're done reading
         return Poll::Ready(Ok(self.rd.rd().len()));
     }
-
-    #[inline(always)]
-    fn process_rx_buffer(&mut self, cx: &mut std::task::Context<'_>) -> Result<(), String> {
-        let mut pixels = 0;
-
-        let error_message = loop {
-            let mut rd = self.rd.rd();
-
-            let rd_len = rd.len();
-
-            let is_binary_command = self.opts.allow_binary_cmd
-                && rd_len >= PXB_PREFIX.len()
-                && &rd.data()[..PXB_PREFIX.len()] == PXB_PREFIX;
-
-            // See if it's the specialized binary command
-            let command = if is_binary_command && rd_len >= PXB_CMD_SIZE {
-                let input_bytes = &rd.data()[..PXB_CMD_SIZE];
-
-                const OFF: usize = PXB_PREFIX.len();
-                let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
-                let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
-
-                let r = input_bytes[OFF + 4];
-                let g = input_bytes[OFF + 5];
-                let b = input_bytes[OFF + 6];
-                let a = input_bytes[OFF + 7];
-
-                rd.consume(PXB_CMD_SIZE);
-
-                Cmd::SetPixel(x as usize, y as usize, Color::from_rgba(r, g, b, a))
-            } else if !is_binary_command {
-                // Find the new line character
-                let pos = rd
-                    .data()
-                    .iter()
-                    .take(LINE_MAX_LENGTH)
-                    .position(|b| *b == b'\n' || *b == b'\r');
-
-                // Get the line, return it
-                if let Some(pos) = pos {
-                    // Find how many line ending chars this line ends with
-                    let mut newlines = 1;
-                    match rd.data().get(pos + 1) {
-                        Some(b) => match *b {
-                            b'\n' | b'\r' => newlines = 2,
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-
-                    // Pull the line of the read buffer
-                    let line = &rd.data()[..pos];
-
-                    // Return the line
-                    let output = match Cmd::decode_line(line) {
-                        Ok(cmd) => cmd,
-                        Err(e) => {
-                            // Report the error to the client
-                            self.buffer(&format!("ERR {}\r\n", e).as_bytes(), cx);
-                            break Some("Command decoding failed".to_string());
-                        }
-                    };
-
-                    rd.consume(pos + newlines);
-
-                    output
-                } else if rd_len > LINE_MAX_LENGTH {
-                    // If no line ending was found, and the buffer is larger than the
-                    // maximum command length, disconnect
-
-                    self.buffer(b"ERR Line length >1024\r\n", cx);
-
-                    // Break the connection, by ending the lines stream
-                    break Some("Client line length too long".to_string());
-                } else {
-                    // Didn't find any more data to process
-                    break None;
-                }
-            } else {
-                break None;
-            };
-
-            let result = command.invoke(&self.pixmap, &mut pixels, &self.opts);
-            // Do something with the result
-            match result {
-                // Do nothing
-                CmdResult::Ok => {}
-
-                // Respond to the client
-                CmdResult::Response(msg) => {
-                    // Create a bytes buffer with the message
-                    self.buffer(msg.as_bytes(), cx);
-                    self.buffer(b"\r\n", cx);
-                }
-
-                // Report the error to the user
-                CmdResult::ClientErr(err) => {
-                    // Report the error to the client
-                    self.buffer(&format!("ERR {}\r\n", err).as_bytes(), cx);
-                    break Some(format!("Client error: {}", err));
-                }
-
-                // Quit the connection
-                CmdResult::Quit => {
-                    break Some("Client sent QUIT".to_string());
-                }
-            }
-        };
-
-        // Increase the amount of set pixels by the amount of pixel set commands
-        // that we processed in this batch
-        self.stats.inc_pixels_by_n(pixels);
-
-        if let Some(disconnect_message) = error_message {
-            Err(disconnect_message)
-        } else {
-            Ok(())
-        }
-    }
 }
 
-impl<T> Future for Lines<T>
+impl<T> Future for Lines<Pin<T>>
 where
     T: DerefMut + Unpin,
     T::Target: AsyncRead + AsyncWrite + Unpin,
@@ -418,7 +422,24 @@ where
             Poll::Pending => return Poll::Pending,
         }
 
-        let rx_process_result = self.process_rx_buffer(cx);
+        let Self {
+            rd,
+            wr,
+            stats,
+            pixmap,
+            opts,
+            ..
+        } = &mut *self.as_mut();
+
+        let rx_process_result = Self::process_rx_buffer(&opts, &stats, &pixmap, rd.rd(), |bytes| {
+            // Push the line onto the end of the write buffer.
+            //
+            // The `put` function is from the `BufMut` trait.
+            wr.extend_from_slice(bytes);
+
+            // Wake the context so we can be polled again immediately
+            cx.waker().wake_by_ref();
+        });
 
         if let Err(disconnect_message) = rx_process_result {
             self.disconnecting = Some(disconnect_message);
