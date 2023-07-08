@@ -219,7 +219,7 @@ fn synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: CodecOptions) 
                 let to_write_len = left_to_write.min(self.buffer.len() - cursor);
 
                 buf.put_slice(&to_write[..to_write_len]);
-                self.as_mut().cursor = (cursor + buf.capacity()) % self.buffer.len();
+                self.as_mut().cursor = (cursor + to_write_len) % self.buffer.len();
 
                 left_to_write -= to_write_len;
             }
