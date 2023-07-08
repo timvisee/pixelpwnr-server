@@ -73,7 +73,7 @@ pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
 /// handle the encoding and decoding as well as reading from and writing to the
 /// socket.
 pub struct Lines<T> {
-    /// The TCP socket.
+    /// The socket from which to read data.
     socket: T,
 
     /// Buffer used when reading from the socket. Data is not returned from
@@ -97,6 +97,8 @@ pub struct Lines<T> {
 
     /// A sleep that has to expire before we should
     /// resume receiving
+    ///
+    /// TODO: also make this more generic :)
     rx_wait: Option<Pin<Box<Sleep>>>,
 
     /// The last time we filled up the RX buffer
