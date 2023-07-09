@@ -74,7 +74,7 @@ pub const PXB_CMD_SIZE: usize = PXB_PREFIX.len() + 2 + 2 + 1 + 1 + 1 + 1;
 /// socket.
 pub struct Lines<T> {
     /// The socket from which to read data.
-    socket: T,
+    pub(crate) socket: T,
 
     /// Buffer used when reading from the socket. Data is not returned from
     /// this buffer until an entire line has been read.
@@ -84,16 +84,16 @@ pub struct Lines<T> {
     wr: BytesMut,
 
     /// Server stats.
-    stats: Arc<Stats>,
+    pub(crate) stats: Arc<Stats>,
 
     /// A pixel map.
-    pixmap: Arc<Pixmap>,
+    pub(crate) pixmap: Arc<Pixmap>,
 
     /// This is `Some(Reason)` if this Lines is disconnecting
     disconnecting: Option<String>,
 
     /// Codec options
-    opts: CodecOptions,
+    pub(crate) opts: CodecOptions,
 
     /// A sleep that has to expire before we should
     /// resume receiving
@@ -248,19 +248,6 @@ impl<T> Lines<T> {
             Err(disconnect_message)
         } else {
             Ok(())
-        }
-    }
-}
-
-impl Lines<&[Cmd]> {
-    pub fn blast(self) {
-        loop {
-            let mut pixels = 0;
-            self.socket.iter().for_each(|cmd| {
-                cmd.invoke(&self.pixmap, &mut pixels, &self.opts);
-            });
-            self.stats.inc_pixels_by_n(pixels);
-            self.stats.inc_bytes_read(pixels * PXB_CMD_SIZE);
         }
     }
 }

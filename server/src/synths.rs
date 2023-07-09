@@ -90,6 +90,8 @@ pub fn tokio_synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: Code
 }
 
 pub fn sync_synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: CodecOptions) {
+    use crate::cmd::Cmd;
+
     let mut buffer = Vec::new();
 
     for x in 0..800u16 {
@@ -99,6 +101,20 @@ pub fn sync_synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: Codec
                 y,
                 0xFFFF_FFFF,
             )));
+        }
+    }
+
+    impl Lines<&[Cmd]> {
+        pub fn blast(self) {
+            loop {
+                let mut pixels = 0;
+                self.socket.iter().for_each(|cmd| {
+                    cmd.invoke(&self.pixmap, &mut pixels, &self.opts);
+                });
+                self.stats.inc_pixels_by_n(pixels);
+                self.stats
+                    .inc_bytes_read(pixels * crate::codec::PXB_CMD_SIZE);
+            }
         }
     }
 
