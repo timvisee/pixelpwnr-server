@@ -5,6 +5,9 @@ mod stat_monitor;
 mod stat_reporter;
 mod stats;
 
+#[cfg(feature = "influxdb2")]
+pub mod influxdb;
+
 use std::{
     path::PathBuf,
     pin::Pin,
@@ -61,7 +64,19 @@ fn main() {
         ));
     }
 
-    let net_running = Arc::new(AtomicBool::new(true));
+    let keep_running = Arc::new(AtomicBool::new(true));
+
+    #[cfg(feature = "influxdb2")]
+    {
+        // If influxdb2 is enabled and the flag is set, start the influxdb2 runner
+        // (or crash if that fails)
+        let influx = arg_handler.influxdb_options.clone();
+        if influx.run_influxdb {
+            runtime
+                .block_on(start_influxdb2(influx, stats.clone(), keep_running.clone()))
+                .unwrap();
+        }
+    }
 
     // Create a std threa first. Tokio's [`TcpStream::listen`] automatically sets
     // SO_REUSEADDR which means that it won't return an error if another program is
@@ -75,7 +90,7 @@ fn main() {
 
     let net_pixmap = pixmap.clone();
     let net_stats = stats.clone();
-    let net_running_2 = net_running.clone();
+    let net_running_2 = keep_running.clone();
     let opts = arg_handler.clone().into();
     let tokio_runtime = std::thread::spawn(move || {
         runtime.block_on(async move {
@@ -85,10 +100,21 @@ fn main() {
     });
 
     if !arg_handler.no_render {
-        render(&arg_handler, pixmap, stats, net_running);
+        render(&arg_handler, pixmap, stats, keep_running);
     } else {
         tokio_runtime.join().unwrap()
     }
+}
+
+#[cfg(feature = "influxdb2")]
+async fn start_influxdb2(
+    opts: influxdb::InfluxDBOptions,
+    stats: Arc<Stats>,
+    keep_running: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let client = influxdb::InfluxDb::new(stats, keep_running, opts).await?;
+    tokio::spawn(client.run());
+    Ok(())
 }
 
 async fn listen(

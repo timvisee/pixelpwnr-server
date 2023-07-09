@@ -83,6 +83,10 @@ pub struct Opts {
     /// Disable binary commands
     #[clap(long)]
     pub no_binary: bool,
+
+    #[cfg(feature = "influxdb2")]
+    #[clap(flatten)]
+    pub influxdb_options: crate::influxdb::InfluxDBOptions,
 }
 
 macro_rules! map_duration {
