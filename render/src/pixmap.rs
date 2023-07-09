@@ -2,8 +2,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::color::Color;
 
-pub type Dimension = u16;
-
 /// A struct representing a pixelmap for pixelflut.
 ///
 /// This struct holds the data for each pixel, and can be concidered a bitmap.
@@ -25,16 +23,19 @@ pub type Dimension = u16;
 ///
 /// More info: https://stackoverflow.com/a/5002256/1000145
 #[repr(align(4))]
-pub struct Pixmap {
+pub struct Pixmap<T = u16> {
     /// A map with a raw color value for each pixel in the map, where each
     /// pixel consists of 4 bytes in a single u32 for each color channel.
     map: Vec<AtomicU32>,
 
     /// Pixelmap dimensions, width and height
-    dimensions: (Dimension, Dimension),
+    dimensions: (T, T),
 }
 
-impl Clone for Pixmap {
+impl<T> Clone for Pixmap<T>
+where
+    T: Clone,
+{
     fn clone(&self) -> Self {
         let map = self
             .map
@@ -49,15 +50,18 @@ impl Clone for Pixmap {
     }
 }
 
-impl Pixmap {
+impl<T> Pixmap<T>
+where
+    T: Into<usize> + PartialOrd + Copy,
+{
     const DEFAULT_PIXEL: u32 = Color::black().to_raw();
 
     /// Construct a new
-    pub fn new(width: Dimension, height: Dimension) -> Self {
+    pub fn new(width: T, height: T) -> Self {
         Pixmap {
             // Build a pixel map, with the default value and the proper sizeto
             // fit each pixel
-            map: (0..width * height)
+            map: (0..width.into() * height.into())
                 .map(|_| AtomicU32::new(Self::DEFAULT_PIXEL))
                 .collect(),
 
@@ -67,29 +71,29 @@ impl Pixmap {
     }
 
     /// Get the width of the pixel map.
-    pub fn width(&self) -> Dimension {
+    pub fn width(&self) -> T {
         self.dimensions.0
     }
 
     /// Get the height of the pixel map.
-    pub fn height(&self) -> Dimension {
+    pub fn height(&self) -> T {
         self.dimensions.1
     }
 
     /// Get the dimensions of the pixel map.
-    pub fn dimensions(&self) -> (Dimension, Dimension) {
+    pub fn dimensions(&self) -> (T, T) {
         self.dimensions
     }
 
     /// Get the pixel at the given coordinate, as color.
-    pub fn pixel(&self, x: Dimension, y: Dimension) -> Result<Color, PixmapErr> {
+    pub fn pixel(&self, x: T, y: T) -> Result<Color, PixmapErr> {
         let pixel_index = self.pixel_index(x, y)?;
         let pixel_value = self.map[pixel_index].load(Ordering::Relaxed);
         Ok(Color::new(pixel_value))
     }
 
     /// Set the pixel at the given coordinate, to the given color.
-    pub fn set_pixel(&self, x: Dimension, y: Dimension, color: Color) -> Result<(), PixmapErr> {
+    pub fn set_pixel(&self, x: T, y: T, color: Color) -> Result<(), PixmapErr> {
         let pixel_index = self.pixel_index(x, y)?;
 
         // A data race can occur here: if two separate threads update the pixel at the same time,
@@ -102,7 +106,7 @@ impl Pixmap {
     }
 
     /// Get the index a pixel is at, for the given coordinate.
-    fn pixel_index(&self, x: Dimension, y: Dimension) -> Result<usize, PixmapErr> {
+    fn pixel_index(&self, x: T, y: T) -> Result<usize, PixmapErr> {
         // Check pixel bounds
         if x >= self.dimensions.0 {
             return Err(PixmapErr::OutOfBound("x coordinate out of bound"));
@@ -111,7 +115,7 @@ impl Pixmap {
         }
 
         // Determine the index and return
-        Ok(y as usize * (self.dimensions.0 as usize) + x as usize)
+        Ok(y.into() * (self.dimensions.0.into()) + x.into())
     }
 
     /// Get the pixelmap data, as a slice of bytes.
