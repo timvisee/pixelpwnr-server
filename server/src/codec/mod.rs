@@ -11,7 +11,7 @@ use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::Sleep;
 
-use crate::cmd::{Cmd, CmdResult};
+use crate::cmd::{Cmd, CmdResult, SetPixelCommand};
 use crate::stats::Stats;
 
 #[cfg(test)]
@@ -156,7 +156,11 @@ impl<T> Lines<T> {
 
                 rd.consume(PXB_CMD_SIZE);
 
-                Cmd::SetPixel(x, y, Color::from_rgba(r, g, b, a))
+                Cmd::SetPixel(SetPixelCommand::new(
+                    x,
+                    y,
+                    Color::from_rgba(r, g, b, a).to_raw(),
+                ))
             } else if !is_binary_command {
                 // Find the new line character
                 let pos = rd

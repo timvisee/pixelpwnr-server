@@ -3,6 +3,7 @@ use std::{pin::Pin, sync::Arc};
 use pixelpwnr_render::Pixmap;
 
 use crate::{
+    cmd::SetPixelCommand,
     codec::{CodecOptions, Lines},
     stats::Stats,
 };
@@ -91,13 +92,13 @@ pub fn tokio_synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: Code
 pub fn sync_synthetic_client(pixmap: Arc<Pixmap>, stats: Arc<Stats>, opts: CodecOptions) {
     let mut buffer = Vec::new();
 
-    for x in 0..800usize {
-        for y in 0..600usize {
-            buffer.push(crate::cmd::Cmd::SetPixel(
+    for x in 0..800u16 {
+        for y in 0..600u16 {
+            buffer.push(crate::cmd::Cmd::SetPixel(SetPixelCommand::new(
                 x,
                 y,
-                pixelpwnr_render::Color::new(0xFFFF_FFFF),
-            ));
+                0xFFFF_FFFF,
+            )));
         }
     }
 

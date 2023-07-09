@@ -3,6 +3,31 @@ use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
 use crate::codec::{CodecOptions, RateLimit};
 
+#[derive(Debug, Copy, Clone)]
+pub struct SetPixelCommand {
+    data: u64,
+}
+
+impl SetPixelCommand {
+    pub fn new(x: u16, y: u16, color: u32) -> Self {
+        Self {
+            data: (x as u64) << 48 | (y as u64) << 32 | (color as u64),
+        }
+    }
+
+    pub fn x(&self) -> u16 {
+        (self.data >> 48 & 0xFFFF) as u16
+    }
+
+    pub fn y(&self) -> u16 {
+        (self.data >> 32 & 0xFFFF) as u16
+    }
+
+    pub fn color(&self) -> Color {
+        Color::new((self.data & 0xFFFF_FFFF) as u32)
+    }
+}
+
 /// A set of pixel commands a client might send.
 ///
 /// These commands may then be invoked on the pixel map state.
@@ -18,7 +43,7 @@ pub enum Cmd {
     /// Set a pixel color.
     ///
     /// The `x` and `y` coordinate, with a `color`.
-    SetPixel(u16, u16, Color),
+    SetPixel(SetPixelCommand),
 
     /// Request the size of the screen.
     Size,
@@ -62,7 +87,7 @@ impl Cmd {
                         Some(color) => {
                             let color =
                                 Color::from_hex_raw(&color).map_err(|_| "invalid color value")?;
-                            Ok(Cmd::SetPixel(x, y, color))
+                            Ok(Cmd::SetPixel(SetPixelCommand::new(x, y, color.to_raw())))
                         }
 
                         // No color part found, get the pixel color
@@ -98,9 +123,9 @@ impl Cmd {
         // Match the command, invoke the proper action
         match self {
             // Set the pixel on the pixel map
-            Cmd::SetPixel(x, y, color) => {
+            Cmd::SetPixel(command) => {
                 // Set the pixel
-                if let Err(err) = pixmap.set_pixel(x, y, color) {
+                if let Err(err) = pixmap.set_pixel(command.x(), command.y(), command.color()) {
                     return err.into();
                 } else {
                     *pixel_set_count += 1;
