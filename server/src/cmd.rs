@@ -1,5 +1,5 @@
 use atoi::atoi;
-use pixelpwnr_render::{Color, Pixmap, PixmapErr};
+use pixelpwnr_render::{pixmap::Dimension, Color, Pixmap, PixmapErr};
 
 use crate::codec::{CodecOptions, RateLimit};
 
@@ -13,12 +13,12 @@ pub enum Cmd {
     /// Get the color of a pixel.
     ///
     /// The `x` and `y` coordinate.
-    GetPixel(usize, usize),
+    GetPixel(Dimension, Dimension),
 
     /// Set a pixel color.
     ///
     /// The `x` and `y` coordinate, with a `color`.
-    SetPixel(usize, usize, Color),
+    SetPixel(Dimension, Dimension, Color),
 
     /// Request the size of the screen.
     Size,

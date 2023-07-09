@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
+use pixelpwnr_render::pixmap::Dimension;
 
 use crate::codec::{CodecOptions, RateLimit};
 
@@ -14,11 +15,11 @@ pub struct Opts {
 
     /// Canvas width (def: screen width)
     #[clap(short, long, value_name = "PIXELS")]
-    pub width: Option<usize>,
+    pub width: Option<Dimension>,
 
     /// Canvas heigth (def: screen height)
     #[clap(short, long, value_name = "PIXELS")]
-    pub height: Option<usize>,
+    pub height: Option<Dimension>,
 
     /// Do not render the canvas
     #[clap(long)]
@@ -93,7 +94,7 @@ macro_rules! map_duration {
 
 impl Opts {
     /// Get the canvas size.
-    pub fn size(&self) -> (usize, usize) {
+    pub fn size(&self) -> (Dimension, Dimension) {
         // TODO: use the current screen size as default here
         (self.width.unwrap_or(800), self.height.unwrap_or(600))
     }

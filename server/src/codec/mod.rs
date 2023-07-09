@@ -156,7 +156,7 @@ impl<T> Lines<T> {
 
                 rd.consume(PXB_CMD_SIZE);
 
-                Cmd::SetPixel(x as usize, y as usize, Color::from_rgba(r, g, b, a))
+                Cmd::SetPixel(x, y, Color::from_rgba(r, g, b, a))
             } else if !is_binary_command {
                 // Find the new line character
                 let pos = rd

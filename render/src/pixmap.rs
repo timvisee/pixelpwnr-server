@@ -2,6 +2,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::color::Color;
 
+pub type Dimension = u16;
+
 /// A struct representing a pixelmap for pixelflut.
 ///
 /// This struct holds the data for each pixel, and can be concidered a bitmap.
@@ -29,7 +31,7 @@ pub struct Pixmap {
     map: Vec<AtomicU32>,
 
     /// Pixelmap dimensions, width and height
-    dimensions: (usize, usize),
+    dimensions: (Dimension, Dimension),
 }
 
 impl Clone for Pixmap {
@@ -51,7 +53,7 @@ impl Pixmap {
     const DEFAULT_PIXEL: u32 = Color::black().to_raw();
 
     /// Construct a new
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: Dimension, height: Dimension) -> Self {
         Pixmap {
             // Build a pixel map, with the default value and the proper sizeto
             // fit each pixel
@@ -65,29 +67,29 @@ impl Pixmap {
     }
 
     /// Get the width of the pixel map.
-    pub fn width(&self) -> usize {
+    pub fn width(&self) -> Dimension {
         self.dimensions.0
     }
 
     /// Get the height of the pixel map.
-    pub fn height(&self) -> usize {
+    pub fn height(&self) -> Dimension {
         self.dimensions.1
     }
 
     /// Get the dimensions of the pixel map.
-    pub fn dimensions(&self) -> (usize, usize) {
+    pub fn dimensions(&self) -> (Dimension, Dimension) {
         self.dimensions
     }
 
     /// Get the pixel at the given coordinate, as color.
-    pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr> {
+    pub fn pixel(&self, x: Dimension, y: Dimension) -> Result<Color, PixmapErr> {
         let pixel_index = self.pixel_index(x, y)?;
         let pixel_value = self.map[pixel_index].load(Ordering::Relaxed);
         Ok(Color::new(pixel_value))
     }
 
     /// Set the pixel at the given coordinate, to the given color.
-    pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
+    pub fn set_pixel(&self, x: Dimension, y: Dimension, color: Color) -> Result<(), PixmapErr> {
         let pixel_index = self.pixel_index(x, y)?;
 
         // A data race can occur here: if two separate threads update the pixel at the same time,
@@ -100,7 +102,7 @@ impl Pixmap {
     }
 
     /// Get the index a pixel is at, for the given coordinate.
-    fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr> {
+    fn pixel_index(&self, x: Dimension, y: Dimension) -> Result<usize, PixmapErr> {
         // Check pixel bounds
         if x >= self.dimensions.0 {
             return Err(PixmapErr::OutOfBound("x coordinate out of bound"));
@@ -109,7 +111,7 @@ impl Pixmap {
         }
 
         // Determine the index and return
-        Ok(y * self.dimensions.0 + x)
+        Ok(y as usize * (self.dimensions.0 as usize) + x as usize)
     }
 
     /// Get the pixelmap data, as a slice of bytes.
