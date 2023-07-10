@@ -38,7 +38,7 @@ num-traits = { version = "*", optional = true }
 futures = { version = "0.3", optional = true }
 
 [features]
-default = [ ]
+default = [ "influxdb2" ]
 influxdb2 = [ "dep:influxdb2", "dep:influxdb2-structmap", "dep:num-traits", "dep:futures" ]
 
 [dev-dependencies]

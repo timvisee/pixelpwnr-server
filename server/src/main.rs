@@ -58,14 +58,6 @@ fn main() {
     let stats = runtime.block_on(build_stats(stat_save_opts));
     let stats = Arc::new(stats);
 
-    #[cfg(feature = "influxdb2")]
-    stat_save_opts.influxdb_config().map(|c| {
-        if let Some(interval) = stat_save_opts.stats_save_interval() {
-            let client = influxdb::InfluxDB::new(c);
-            runtime.spawn(client.run(stats.clone(), keep_running.clone(), interval));
-        }
-    });
-
     if let Some(dir) = arg_handler.save_dir.clone() {
         let pixmap = pixmap.clone();
         runtime.spawn(spawn_save_image(
@@ -90,6 +82,8 @@ fn main() {
     let net_running_2 = keep_running.clone();
     let opts = arg_handler.clone().into();
 
+    let renderer = build_renderer(&arg_handler, pixmap, stats, keep_running, &runtime);
+
     let tokio_runtime = std::thread::spawn(move || {
         runtime.block_on(async move {
             listen(listener, net_pixmap, net_stats, opts).await;
@@ -98,7 +92,7 @@ fn main() {
     });
 
     if !arg_handler.no_render {
-        render(&arg_handler, pixmap, stats, keep_running);
+        renderer();
     } else {
         tokio_runtime.join().unwrap()
     }
@@ -222,12 +216,13 @@ fn handle_socket(
 }
 
 /// Start the pixel map renderer.
-fn render(
-    arg_handler: &Opts,
+fn build_renderer<'a>(
+    arg_handler: &'a Opts,
     pixmap: Arc<Pixmap>,
     stats: Arc<Stats>,
     net_running: Arc<AtomicBool>,
-) {
+    runtime: &tokio::runtime::Runtime,
+) -> impl FnOnce() -> () + 'a {
     // Build the renderer
     let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
 
@@ -242,16 +237,23 @@ fn render(
         arg_handler.stat_options.stats_file.clone(),
         stats,
         Some(stats_text),
+        #[cfg(feature = "influxdb2")]
+        arg_handler
+            .stat_options
+            .influxdb_config()
+            .map(|c| influxdb::InfluxDB::new(c)),
     );
-    reporter.start();
+    runtime.spawn(reporter.run());
 
     // Render the canvas
-    renderer.run(
-        arg_handler.fullscreen,
-        arg_handler.stats_font_size,
-        arg_handler.stats_offset(),
-        arg_handler.stats_padding,
-        arg_handler.stats_col_spacing,
-        net_running,
-    );
+    || {
+        renderer.run(
+            arg_handler.fullscreen,
+            arg_handler.stats_font_size,
+            arg_handler.stats_offset(),
+            arg_handler.stats_padding,
+            arg_handler.stats_col_spacing,
+            net_running,
+        )
+    }
 }

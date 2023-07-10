@@ -1,8 +1,3 @@
-use std::{
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
-};
-
 use futures::TryFutureExt;
 use influxdb2::{
     models::{DataPoint, Query},
@@ -42,22 +37,6 @@ impl InfluxDB {
             server_name: options.server_name,
             bucket: options.bucket,
         }
-    }
-
-    pub async fn run(
-        mut self,
-        stats: Arc<Stats>,
-        keep_running: Arc<AtomicBool>,
-        interval: Duration,
-    ) -> Result<(), String> {
-        let mut reporting_interval = tokio::time::interval(interval);
-
-        while keep_running.load(std::sync::atomic::Ordering::Relaxed) {
-            reporting_interval.tick().await;
-            self.write_stats(&stats).await?;
-        }
-
-        Ok(())
     }
 
     async fn load_stat(&mut self, stat_name: &str) -> Result<u64, String> {
@@ -112,7 +91,7 @@ impl InfluxDB {
         Stats::new_with(pixels_set as usize, bandwidth as usize)
     }
 
-    async fn write_stats(&mut self, stats: &Stats) -> Result<(), String> {
+    pub async fn write_stats(&mut self, stats: &Stats) -> Result<(), String> {
         let bandwidth_used = stats.bytes_read();
         let pixels_set = stats.pixels();
         let clients = stats.clients();
