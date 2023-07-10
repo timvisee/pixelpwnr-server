@@ -39,7 +39,7 @@ futures = { version = "0.3", optional = true }
 
 [features]
 default = [ ]
-influxdb2 = [ "dep:influxdb2", "dep:influxdb2-structmap", "dep:num-traits", "dep:futures", "clap/env" ]
+influxdb2 = [ "dep:influxdb2", "dep:influxdb2-structmap", "dep:num-traits", "dep:futures" ]
 
 [dev-dependencies]
 tokio-test = "0.4"
