@@ -152,7 +152,7 @@ impl StatReporter {
                     // Report stats to the stdout
                     if last.is_none() || elapsed >= interval {
                         // Create a raw stats instance
-                        println!("Saving persistent stats...");
+                        log::debug!("Saving persistent stats...");
                         let raw = stats.to_raw();
 
                         // Save the raw stats

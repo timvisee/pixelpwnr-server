@@ -4,81 +4,120 @@ use std::{
 };
 
 use futures::TryFutureExt;
-use influxdb2::models::DataPoint;
+use influxdb2::{
+    models::{DataPoint, Query},
+    FromDataPoint,
+};
+use serde::Deserialize;
 
 use crate::stats::Stats;
 
-#[cfg(feature = "influxdb2")]
-#[derive(Clone, Debug, clap::Args)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct InfluxDBOptions {
-    #[clap(short = 'i', long)]
-    pub run_influxdb: bool,
-    #[clap(env = "INFLUXDB_TOKEN")]
-    pub influxdb_api_token: String,
-    #[clap(env = "INFLUXDB_HOST")]
-    pub influxdb_host: String,
-    #[clap(env = "INFLUXDB_ORG")]
-    pub influxdb_org: String,
-    #[clap(env = "INFLUXDB_BUCKET")]
-    pub influxdb_bucket: String,
-    #[clap(env = "INFLUXDB_SERVER_NAME", default_value = "pixelflut")]
-    pub influxdb_server_name: String,
-    #[clap(env = "INFLUXDB_REPORTING_INTERVAL_MS", default_value = "500")]
-    pub influxdb_reporting_interval_ms: u64,
+    pub api_token: String,
+    pub host: String,
+    pub org: String,
+    pub bucket: String,
+    pub server_name: String,
 }
 
-pub struct InfluxDb {
+pub struct InfluxDB {
     server_name: String,
     bucket: String,
-    stats: Arc<Stats>,
-    reporting_interval: tokio::time::Interval,
-    keep_running: Arc<AtomicBool>,
     inner: influxdb2::Client,
 }
 
-impl InfluxDb {
-    pub async fn new(
-        stats: Arc<Stats>,
-        keep_running: Arc<AtomicBool>,
-        options: InfluxDBOptions,
-    ) -> Result<Self, String> {
-        let client = influxdb2::Client::new(
-            options.influxdb_host,
-            options.influxdb_org,
-            options.influxdb_api_token,
-        );
+impl From<InfluxDBOptions> for InfluxDB {
+    fn from(value: InfluxDBOptions) -> Self {
+        Self::new(value)
+    }
+}
 
-        let mut me = Self {
+impl InfluxDB {
+    pub fn new(options: InfluxDBOptions) -> Self {
+        let client = influxdb2::Client::new(options.host, options.org, options.api_token);
+
+        Self {
             inner: client,
-            server_name: options.influxdb_server_name,
-            bucket: options.influxdb_bucket,
-            reporting_interval: tokio::time::interval(Duration::from_millis(
-                options.influxdb_reporting_interval_ms,
-            )),
-            stats,
-            keep_running,
-        };
-
-        me.write_stats().await?;
-
-        Ok(me)
+            server_name: options.server_name,
+            bucket: options.bucket,
+        }
     }
 
-    pub async fn run(mut self) -> Result<(), String> {
-        while self.keep_running.load(std::sync::atomic::Ordering::Relaxed) {
-            self.reporting_interval.tick().await;
-            self.write_stats().await?;
+    pub async fn run(
+        mut self,
+        stats: Arc<Stats>,
+        keep_running: Arc<AtomicBool>,
+        interval: Duration,
+    ) -> Result<(), String> {
+        let mut reporting_interval = tokio::time::interval(interval);
+
+        while keep_running.load(std::sync::atomic::Ordering::Relaxed) {
+            reporting_interval.tick().await;
+            self.write_stats(&stats).await?;
         }
 
         Ok(())
     }
 
-    async fn write_stats(&mut self) -> Result<(), String> {
-        let bandwidth_used = self.stats.bytes_read();
-        let pixels_set = self.stats.pixels();
-        let clients = self.stats.clients();
+    async fn load_stat(&mut self, stat_name: &str) -> Result<u64, String> {
+        let Self {
+            server_name,
+            bucket,
+            inner,
+        } = self;
 
-        println!("Writing stats... {bandwidth_used} bytes, {pixels_set} pixels, {clients} clients");
+        let query = format!(
+            r#"
+            from(bucket: "{bucket}")
+                |> range(start: -30d)
+                |> filter(fn: (r) => r["_measurement"] == "{stat_name}")
+                |> filter(fn: (r) => r["_field"] == "value")
+                |> filter(fn: (r) => r["server_name"] == "{server_name}")
+                |> max()
+        "#
+        );
+
+        let query = Query::new(query);
+
+        #[derive(FromDataPoint, Default)]
+        struct Stat {
+            value: f64,
+        }
+
+        let res: Vec<Stat> = inner.query::<Stat>(Some(query)).await.unwrap();
+
+        Ok(res.first().map(|v| v.value).unwrap_or(0.0) as u64)
+    }
+
+    pub async fn load_stats(&mut self) -> Stats {
+        macro_rules! try_load {
+            ($name:literal) => {
+                match self.load_stat($name).await {
+                    Ok(loaded_value) => {
+                        log::info!("Loaded stat {}. Value: {loaded_value}", $name);
+                        loaded_value
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to load stat {}. {e}", $name);
+                        0
+                    }
+                }
+            };
+        }
+
+        let bandwidth = try_load!("bandwidth");
+        let pixels_set = try_load!("pixels");
+
+        Stats::new_with(pixels_set as usize, bandwidth as usize)
+    }
+
+    async fn write_stats(&mut self, stats: &Stats) -> Result<(), String> {
+        let bandwidth_used = stats.bytes_read();
+        let pixels_set = stats.pixels();
+        let clients = stats.clients();
+
+        log::debug!("Sending stats to influxdb:\n\t{bandwidth_used} bytes\n\t{pixels_set} pixels\n\t{clients} clients");
 
         let point = |name: &str, value: usize| {
             DataPoint::builder(name)

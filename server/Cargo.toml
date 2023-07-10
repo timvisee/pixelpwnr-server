@@ -29,13 +29,17 @@ tokio = { version = "1.17", features = ["net", "rt", "rt-multi-thread", "macros"
 parking_lot = "0.12.0"
 image = { version = "0.24", default-features = false, features = [ "png" ] }
 pipebuf = "0.2"
+log = "0.4"
+pretty_env_logger = "0.5"
 
-influxdb2 = { version = "0.4", optional = true }
+influxdb2 = { version = "0.4", optional = true, default-features = false }
+influxdb2-structmap = { version = "*", optional = true }
+num-traits = { version = "*", optional = true }
 futures = { version = "0.3", optional = true }
 
 [features]
 default = [ ]
-influxdb2 = [ "dep:influxdb2", "dep:futures", "clap/env" ]
+influxdb2 = [ "dep:influxdb2", "dep:influxdb2-structmap", "dep:num-traits", "dep:futures", "clap/env" ]
 
 [dev-dependencies]
 tokio-test = "0.4"

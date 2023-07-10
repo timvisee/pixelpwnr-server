@@ -3,3 +3,4 @@
 .*.swp
 .idea
 .env
+influxdb.yaml

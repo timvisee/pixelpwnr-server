@@ -47,6 +47,18 @@ impl Stats {
         }
     }
 
+    /// Construct a new stats object.
+    #[cfg(feature = "influxdb2")]
+    pub fn new_with(pixels: usize, bytes_read: usize) -> Self {
+        Stats {
+            pixels: AtomicUsize::new(pixels),
+            pixels_monitor: Mutex::new(StatMonitor::new()),
+            clients: AtomicUsize::new(0),
+            bytes_read: AtomicUsize::new(bytes_read),
+            bytes_read_monitor: Mutex::new(StatMonitor::new()),
+        }
+    }
+
     /// Get the total number of clients currently connected.
     pub fn clients(&self) -> usize {
         self.clients.load(Ordering::Relaxed)
@@ -240,7 +252,7 @@ impl StatsRaw {
     pub fn load(path: &Path) -> Option<Self> {
         // Make sure the file exists
         if !path.is_file() {
-            println!("Not loading persistent stats, file not found");
+            log::warn!("Not loading persistent stats, file not found");
             return None;
         }
 
@@ -254,7 +266,7 @@ impl StatsRaw {
 
         // Load the raw state
         return serde_yaml::from_str(&data)
-            .map_err(|_| println!("failed to load persistent stats, malformed data"))
+            .map_err(|_| log::warn!("failed to load persistent stats, malformed data"))
             .ok();
     }
 
