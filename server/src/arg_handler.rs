@@ -100,7 +100,7 @@ pub struct StatsOptions {
     /// The YAML configuration file describing to what influxdb2 the
     /// stats should be written (over HTTP)
     #[cfg(feature = "influxdb2")]
-    #[clap(long)]
+    #[clap(long = "influxdb-config")]
     stats_influxdb_config: Option<PathBuf>,
 }
 
@@ -145,20 +145,22 @@ impl StatsOptions {
         let file = match std::fs::File::open(config) {
             Ok(v) => v,
             Err(e) => {
-                panic!(
+                log::error!(
                     "Could not open influxdb config file (\"{}\"). {e}",
                     config.as_os_str().to_str().unwrap()
                 );
+                std::process::exit(1);
             }
         };
 
         let options = match serde_yaml::from_reader(file) {
             Ok(o) => o,
             Err(e) => {
-                panic!(
+                log::error!(
                     "Failed to parse influxdb config (\"{}\"). {e}",
                     config.as_os_str().to_str().unwrap()
                 );
+                std::process::exit(1);
             }
         };
 
@@ -189,7 +191,8 @@ impl Opts {
         let mut parts = lower_case.split("x");
 
         if parts.clone().count() != 2 {
-            panic!("Invalid stats offset");
+            log::error!("Invalid stats offset");
+            std::process::exit(1);
         }
 
         (
