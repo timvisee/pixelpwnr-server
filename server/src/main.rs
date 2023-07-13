@@ -29,6 +29,8 @@ use stats::{Stats, StatsRaw};
 
 use crate::arg_handler::{Opts, StatsSaveMethod};
 
+const LOG_TARGET: &str = "pixelpwnr";
+
 fn main() {
     pretty_env_logger::formatted_builder()
         .parse_filters(
@@ -50,7 +52,7 @@ fn main() {
 
     let stat_save_opts = &arg_handler.stat_options;
     let (width, height) = arg_handler.size();
-    log::info!("Canvas size: {}x{}", width, height);
+    log::info!(target: LOG_TARGET, "Canvas size: {}x{}", width, height);
 
     let pixmap = Arc::new(Pixmap::new(width, height));
     let keep_running = Arc::new(AtomicBool::new(true));
@@ -75,7 +77,7 @@ fn main() {
         Ok(v) => v,
         Err(e) => panic!("Failed to bind to address {:?}. Error: {:?}", &host, e),
     };
-    log::info!("Listening on: {}", host);
+    log::info!(target: LOG_TARGET, "Listening on: {}", host);
 
     let net_pixmap = pixmap.clone();
     let net_stats = stats.clone();
@@ -107,7 +109,10 @@ async fn build_stats(stat_opts: &StatsOptions) -> Stats {
                     .map(Stats::from_raw)
                     .unwrap_or(Stats::new())
             } else {
-                log::warn!("stat loading is set to be from file, but stats file was not provided. Continuing with empty stats.");
+                log::warn!(
+                        target: LOG_TARGET,
+                    "stat loading is set to be from file, but stats file was not provided. Continuing with empty stats."
+                );
                 Stats::new()
             }
         }
@@ -118,6 +123,7 @@ async fn build_stats(stat_opts: &StatsOptions) -> Stats {
                 client.load_stats().await
             } else {
                 log::warn!(
+                    target: LOG_TARGET,
                     "stat loading is set to be from influxdb, but influxdb config was not provided. Continuing with empty stats."
                 );
                 Stats::new()
@@ -141,7 +147,10 @@ async fn listen(
         let (socket, _) = if let Ok(res) = listener.accept().await {
             res
         } else {
-            log::warn!("Failed to accept a connection");
+            log::warn!(
+                target: LOG_TARGET,
+                "Failed to accept a connection"
+            );
             continue;
         };
         handle_socket(socket, pixmap_worker, stats_worker, opts);
@@ -187,7 +196,7 @@ fn handle_socket(
 ) {
     // A client connected, ensure we're able to get it's address
     let addr = socket.peer_addr().expect("failed to get remote address");
-    log::info!("A client connected (from: {})", addr);
+    log::info!(target: LOG_TARGET, "A client connected (from: {})", addr);
 
     // Increase the number of clients
     stats.inc_clients();
@@ -208,7 +217,7 @@ fn handle_socket(
         let result = lines.await;
 
         // Print a disconnect message
-        log::info!("A client disconnected (from: {}). Reason: {}", addr, result);
+        log::info!(target: LOG_TARGET, "A client disconnected (from: {}). Reason: {}", addr, result);
 
         // Decreasde the client connections number
         disconnect_stats.dec_clients();

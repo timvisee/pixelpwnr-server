@@ -59,6 +59,7 @@ impl StatReporter {
 
     /// Start the reporter, and spawn a thread internally which controls the
     /// reporting.
+    #[cfg_attr(not(feature = "influxdb2"), allow(unused_mut))]
     pub async fn run(mut self) {
         // Do not actually start a thread if there is nothing to report
         let should_stop = self.screen_interval.is_none() && self.stdout_interval.is_none();
@@ -135,6 +136,7 @@ impl StatReporter {
                         raw.save(save_path.as_path())
                     }
 
+                    #[cfg(feature = "influxdb2")]
                     if let Some(client) = &mut self.influxdb_client {
                         if let Err(e) = client.write_stats(&self.stats).await {
                             log::error!("Failed to write stats to influxdb: {e}");
