@@ -1,11 +1,12 @@
 use std::ops::DerefMut;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Poll;
 use std::time::{Duration, Instant};
-use std::{mem::MaybeUninit, pin::Pin};
 
 use bytes::BytesMut;
 use futures::Future;
+use pipebuf::PipeBuf;
 use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time::Sleep;
@@ -81,7 +82,7 @@ where
 
     /// Buffer used when reading from the socket. Data is not returned from
     /// this buffer until an entire line has been read.
-    rd: BytesMut,
+    rd: PipeBuf,
 
     /// Buffer used to stage data before writing it to the socket.
     wr: BytesMut,
@@ -115,7 +116,7 @@ where
     pub fn new(socket: Pin<T>, stats: Arc<Stats>, pixmap: Arc<Pixmap>, opts: CodecOptions) -> Self {
         Lines {
             socket,
-            rd: BytesMut::with_capacity(BUF_SIZE),
+            rd: PipeBuf::with_fixed_capacity(BUF_SIZE),
             wr: BytesMut::with_capacity(BUF_SIZE),
             stats,
             pixmap,
@@ -180,8 +181,10 @@ where
     /// `Err(disconnect reason message)`.
     #[inline(always)]
     fn fill_read_buf(&mut self, cx: &mut std::task::Context<'_>) -> Poll<Result<usize, ()>> {
+        let rd = self.rd.rd();
+
         // Get the length of buffer contents
-        let len = self.rd.len();
+        let len = rd.len();
 
         // We've enough data to continue
         if len > BUF_THRESHOLD {
@@ -210,8 +213,9 @@ where
         }
 
         // Read data and try to fill the buffer, update the statistics
-        let mut local_buf: [MaybeUninit<u8>; BUF_SIZE] = [MaybeUninit::uninit(); BUF_SIZE];
-        let mut read_buf = tokio::io::ReadBuf::uninit(&mut local_buf[..read_len]);
+        let mut wr = self.rd.wr();
+        let local_buf = wr.space(read_len);
+        let mut read_buf = tokio::io::ReadBuf::new(local_buf);
 
         let amount = match self.socket.as_mut().poll_read(cx, &mut read_buf) {
             Poll::Ready(Ok(_)) => read_buf.filled().len(),
@@ -224,14 +228,14 @@ where
             return Poll::Ready(Err(()));
         }
 
-        self.rd.extend_from_slice(read_buf.filled());
+        wr.commit(amount);
 
         self.stats.inc_bytes_read(amount);
 
         self.last_refill_time = Instant::now();
 
         // We're done reading
-        return Poll::Ready(Ok(self.rd.len()));
+        return Poll::Ready(Ok(self.rd.rd().len()));
     }
 
     #[inline(always)]
@@ -239,15 +243,18 @@ where
         let mut pixels = 0;
 
         let error_message = loop {
-            let rd_len = self.rd.len();
+            let mut rd = self.rd.rd();
+
+            let rd_len = rd.len();
 
             let is_binary_command = self.opts.allow_binary_cmd
                 && rd_len >= PXB_PREFIX.len()
-                && &self.rd[..PXB_PREFIX.len()] == PXB_PREFIX;
+                && &rd.data()[..PXB_PREFIX.len()] == PXB_PREFIX;
 
             // See if it's the specialized binary command
             let command = if is_binary_command && rd_len >= PXB_CMD_SIZE {
-                let input_bytes = self.rd.split_to(PXB_CMD_SIZE);
+                let input_bytes = &rd.data()[..PXB_CMD_SIZE];
+
                 const OFF: usize = PXB_PREFIX.len();
                 let x = u16::from_le_bytes(input_bytes[OFF..OFF + 2].try_into().expect("Huh"));
                 let y = u16::from_le_bytes(input_bytes[OFF + 2..OFF + 4].try_into().expect("Huh"));
@@ -257,11 +264,13 @@ where
                 let b = input_bytes[OFF + 6];
                 let a = input_bytes[OFF + 7];
 
+                rd.consume(PXB_CMD_SIZE);
+
                 Cmd::SetPixel(x as usize, y as usize, Color::from_rgba(r, g, b, a))
             } else if !is_binary_command {
                 // Find the new line character
-                let pos = self
-                    .rd
+                let pos = rd
+                    .data()
                     .iter()
                     .take(LINE_MAX_LENGTH)
                     .position(|b| *b == b'\n' || *b == b'\r');
@@ -270,7 +279,7 @@ where
                 if let Some(pos) = pos {
                     // Find how many line ending chars this line ends with
                     let mut newlines = 1;
-                    match self.rd.get(pos + 1) {
+                    match rd.data().get(pos + 1) {
                         Some(b) => match *b {
                             b'\n' | b'\r' => newlines = 2,
                             _ => {}
@@ -279,20 +288,21 @@ where
                     }
 
                     // Pull the line of the read buffer
-                    let mut line = self.rd.split_to(pos + newlines);
-
-                    // Drop trailing new line characters
-                    line.truncate(pos);
+                    let line = &rd.data()[..pos];
 
                     // Return the line
-                    match Cmd::decode_line(line.freeze()) {
+                    let output = match Cmd::decode_line(line) {
                         Ok(cmd) => cmd,
                         Err(e) => {
                             // Report the error to the client
                             self.buffer(&format!("ERR {}\r\n", e).as_bytes(), cx);
                             break Some("Command decoding failed".to_string());
                         }
-                    }
+                    };
+
+                    rd.consume(pos + newlines);
+
+                    output
                 } else if rd_len > LINE_MAX_LENGTH {
                     // If no line ending was found, and the buffer is larger than the
                     // maximum command length, disconnect

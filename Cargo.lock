@@ -1202,6 +1202,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "pipebuf"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0be285f3bc04ae75c66dba81c7cdd745a1d794ac0a0c4b15a7f661c4bf584bf"
+
+[[package]]
 name = "pixelpwnr-render"
 version = "0.1.0"
 dependencies = [
@@ -1226,6 +1232,7 @@ dependencies = [
  "image",
  "number_prefix",
  "parking_lot 0.12.1",
+ "pipebuf",
  "pixelpwnr-render",
  "serde",
  "serde_yaml",

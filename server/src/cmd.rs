@@ -1,5 +1,4 @@
 use atoi::atoi;
-use bytes::Bytes;
 use pixelpwnr_render::{Color, Pixmap, PixmapErr};
 
 use crate::codec::{CodecOptions, RateLimit};
@@ -36,7 +35,7 @@ pub enum Cmd {
 
 impl Cmd {
     /// Decode the command to run, from the given input bytes.
-    pub fn decode_line<'a>(input_bytes: Bytes) -> Result<Self, &'a str> {
+    pub fn decode_line<'a>(input_bytes: &[u8]) -> Result<Self, &'a str> {
         // Iterate over input parts
         let mut input = input_bytes
             .split(|b| b == &b' ')
