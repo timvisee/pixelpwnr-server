@@ -88,8 +88,9 @@ pub struct StatsOptions {
 
     /// If this is set, the stats will be loaded using the provided
     /// method.
-    #[cfg_attr(feature = "influxdb2", doc = "(Available: file, influxdb)")]
-    #[cfg_attr(not(feature = "influxdb2"), doc = "(Available: file)")]
+    ///
+    /// Available: file
+    #[cfg_attr(feature = "influxdb2", doc = ", influxdb")]
     #[clap(long)]
     pub load_on_start: Option<StatsSaveMethod>,
 
