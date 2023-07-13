@@ -81,6 +81,28 @@ under heavy load:
 - Increase the [file descriptor limit][filedescriptorlimit] (on Linux).
 - Quit as many other running programs.
 
+# InfluxDB 2 reporting
+
+This server can also report some statistics (total bytes read from clients, total pixels updated, total clients connected) to an Influx DB 2 instance.
+
+To use it, compile the binary with the `influxdb2` feature, provide the `--influxdb-config` option pointing to a file, and set `--stats-save-interval-ms`.
+
+If you wish to report stats over TLS, you will also have to activate one of [`influxdb2`'s TLS features](https://docs.rs/crate/influxdb2/latest/features). 
+
+```yaml
+# influxdb.yaml
+# The host to connect to
+host: "http://influxdb:8086"
+# The API token to use when reading and writing
+api_token: "NDa6sIh2oei8oy-QPwpEKt6YhN3eeTC4Na-7HRoKzht9uePnxo-wSYVDgr73WWj1DEYonVWsWP7aG58hFJThWQ=="
+# The organization that the bucket belongs to
+org: "Home"
+# The bucket to place the data in
+bucket: "pixelflut"
+# The server_name to tag up- and downloaded data with
+server_name: "pixelflut"
+```
+
 ## Relevant projects
 * [pixelpwnr (client)][pixelpwnr]
 
