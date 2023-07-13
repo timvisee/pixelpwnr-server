@@ -2,3 +2,5 @@
 **/*.rs.bk
 .*.swp
 .idea
+.env
+influxdb.yaml

@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -5,7 +6,6 @@ use std::task::Poll;
 use std::time::{Duration, Instant};
 
 use bytes::BytesMut;
-use futures::Future;
 use pipebuf::PipeBuf;
 use pixelpwnr_render::{Color, Pixmap};
 use tokio::io::{AsyncRead, AsyncWrite};

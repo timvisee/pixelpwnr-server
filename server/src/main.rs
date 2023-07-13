@@ -5,6 +5,9 @@ mod stat_monitor;
 mod stat_reporter;
 mod stats;
 
+#[cfg(feature = "influxdb2")]
+pub mod influxdb;
+
 use std::{
     path::PathBuf,
     pin::Pin,
@@ -15,6 +18,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use arg_handler::StatsOptions;
 use clap::StructOpt;
 use pixelpwnr_render::{Pixmap, Renderer};
 use tokio::net::{TcpListener, TcpStream};
@@ -23,27 +27,17 @@ use codec::{CodecOptions, Lines};
 use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
 
-use crate::arg_handler::Opts;
-
-// TODO: use some constant for new lines
+use crate::arg_handler::{Opts, StatsSaveMethod};
 
 fn main() {
-    let arg_handler = Opts::parse();
-
-    // Build a stats manager, load persistent stats
-    let stats = arg_handler
-        .stats_file
-        .as_ref()
-        .map(|f| StatsRaw::load(f.as_path()))
-        .flatten()
-        .map(|s| Stats::from_raw(&s))
-        .unwrap_or(Stats::new());
-
-    let stats = Arc::new(stats);
-
-    let (width, height) = arg_handler.size();
-    let pixmap = Arc::new(Pixmap::new(width, height));
-    println!("Canvas size: {}x{}", width, height);
+    pretty_env_logger::formatted_builder()
+        .parse_filters(
+            &std::env::vars()
+                .find(|(n, _)| n == "RUST_LOG")
+                .map(|(_, v)| v)
+                .unwrap_or("info,gfx_device_gl=off,winit=off".to_string()),
+        )
+        .init();
 
     // Create a new runtime to be ran on a different (set of) OS threads
     // so that we don't block the runtime by running the renderer on it
@@ -51,6 +45,18 @@ fn main() {
         .enable_all()
         .build()
         .unwrap();
+
+    let arg_handler = Opts::parse();
+
+    let stat_save_opts = &arg_handler.stat_options;
+    let (width, height) = arg_handler.size();
+    log::info!("Canvas size: {}x{}", width, height);
+
+    let pixmap = Arc::new(Pixmap::new(width, height));
+    let keep_running = Arc::new(AtomicBool::new(true));
+
+    let stats = runtime.block_on(build_stats(stat_save_opts));
+    let stats = Arc::new(stats);
 
     if let Some(dir) = arg_handler.save_dir.clone() {
         let pixmap = pixmap.clone();
@@ -61,8 +67,6 @@ fn main() {
         ));
     }
 
-    let net_running = Arc::new(AtomicBool::new(true));
-
     // Create a std threa first. Tokio's [`TcpStream::listen`] automatically sets
     // SO_REUSEADDR which means that it won't return an error if another program is
     // already listening on our port/address. Weird.
@@ -71,12 +75,15 @@ fn main() {
         Ok(v) => v,
         Err(e) => panic!("Failed to bind to address {:?}. Error: {:?}", &host, e),
     };
-    println!("Listening on: {}", host);
+    log::info!("Listening on: {}", host);
 
     let net_pixmap = pixmap.clone();
     let net_stats = stats.clone();
-    let net_running_2 = net_running.clone();
+    let net_running_2 = keep_running.clone();
     let opts = arg_handler.clone().into();
+
+    let renderer = build_renderer(&arg_handler, pixmap, stats, keep_running, &runtime);
+
     let tokio_runtime = std::thread::spawn(move || {
         runtime.block_on(async move {
             listen(listener, net_pixmap, net_stats, opts).await;
@@ -85,9 +92,36 @@ fn main() {
     });
 
     if !arg_handler.no_render {
-        render(&arg_handler, pixmap, stats, net_running);
+        renderer();
     } else {
         tokio_runtime.join().unwrap()
+    }
+}
+
+async fn build_stats(stat_opts: &StatsOptions) -> Stats {
+    match stat_opts.load_on_start {
+        Some(StatsSaveMethod::File) => {
+            if let Some(path) = &stat_opts.stats_file {
+                StatsRaw::load(path.as_path())
+                    .as_ref()
+                    .map(Stats::from_raw)
+                    .unwrap_or(Stats::new())
+            } else {
+                log::warn!("stat loading is set to be from file, but stats file was not provided. Continuing with empty stats.");
+                Stats::new()
+            }
+        }
+        #[cfg(feature = "influxdb2")]
+        Some(StatsSaveMethod::Influxdb) => {
+            if let Some(influxdb_config) = stat_opts.influxdb_config() {
+                let mut client = influxdb::InfluxDB::new(influxdb_config);
+                client.load_stats().await
+            } else {
+                log::warn!("stat loading is set to be from influxdb, but influxdb config was not provided. Continuing with empty stats.");
+                Stats::new()
+            }
+        }
+        None => Stats::new(),
     }
 }
 
@@ -105,7 +139,7 @@ async fn listen(
         let (socket, _) = if let Ok(res) = listener.accept().await {
             res
         } else {
-            println!("Failed to accept a connection");
+            log::warn!("Failed to accept a connection");
             continue;
         };
         handle_socket(socket, pixmap_worker, stats_worker, opts);
@@ -151,7 +185,7 @@ fn handle_socket(
 ) {
     // A client connected, ensure we're able to get it's address
     let addr = socket.peer_addr().expect("failed to get remote address");
-    println!("A client connected (from: {})", addr);
+    log::info!("A client connected (from: {})", addr);
 
     // Increase the number of clients
     stats.inc_clients();
@@ -172,7 +206,7 @@ fn handle_socket(
         let result = lines.await;
 
         // Print a disconnect message
-        println!("A client disconnected (from: {}). Reason: {}", addr, result);
+        log::info!("A client disconnected (from: {}). Reason: {}", addr, result);
 
         // Decreasde the client connections number
         disconnect_stats.dec_clients();
@@ -180,12 +214,13 @@ fn handle_socket(
 }
 
 /// Start the pixel map renderer.
-fn render(
-    arg_handler: &Opts,
+fn build_renderer<'a>(
+    arg_handler: &'a Opts,
     pixmap: Arc<Pixmap>,
     stats: Arc<Stats>,
     net_running: Arc<AtomicBool>,
-) {
+    runtime: &tokio::runtime::Runtime,
+) -> impl FnOnce() -> () + 'a {
     // Build the renderer
     let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
 
@@ -196,20 +231,27 @@ fn render(
     let reporter = StatReporter::new(
         arg_handler.stats_screen_interval(),
         arg_handler.stats_stdout_interval(),
-        arg_handler.stats_save_interval(),
-        arg_handler.stats_file.clone(),
+        arg_handler.stat_options.stats_save_interval(),
+        arg_handler.stat_options.stats_file.clone(),
         stats,
         Some(stats_text),
+        #[cfg(feature = "influxdb2")]
+        arg_handler
+            .stat_options
+            .influxdb_config()
+            .map(|c| influxdb::InfluxDB::new(c)),
     );
-    reporter.start();
+    runtime.spawn(reporter.run());
 
     // Render the canvas
-    renderer.run(
-        arg_handler.fullscreen,
-        arg_handler.stats_font_size,
-        arg_handler.stats_offset(),
-        arg_handler.stats_padding,
-        arg_handler.stats_col_spacing,
-        net_running,
-    );
+    || {
+        renderer.run(
+            arg_handler.fullscreen,
+            arg_handler.stats_font_size,
+            arg_handler.stats_offset(),
+            arg_handler.stats_padding,
+            arg_handler.stats_col_spacing,
+            net_running,
+        )
+    }
 }

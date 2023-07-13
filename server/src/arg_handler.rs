@@ -1,8 +1,8 @@
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::{net::SocketAddr, str::FromStr};
 
-use clap::Parser;
+use clap::{Args, Parser};
 
 use crate::codec::{CodecOptions, RateLimit};
 
@@ -28,13 +28,8 @@ pub struct Opts {
     #[clap(short, long)]
     pub fullscreen: bool,
 
-    /// The file to use for persistent stats
-    #[clap(long, alias = "file", value_name = "FILE")]
-    pub stats_file: Option<PathBuf>,
-
-    /// How often to save persistent stats
-    #[clap(long, value_name = "SECONDS", alias = "stats-save-interval")]
-    stats_file_interval: Option<u64>,
+    #[clap(flatten)]
+    pub stat_options: StatsOptions,
 
     /// Reporting interval of stats on screen
     #[clap(long, value_name = "SECONDS", alias = "stats-screen-interval")]
@@ -85,10 +80,93 @@ pub struct Opts {
     pub no_binary: bool,
 }
 
+#[derive(Clone, Debug, Args)]
+pub struct StatsOptions {
+    /// The interval at which to save stats.
+    #[clap(long)]
+    pub stats_save_interval_ms: Option<u64>,
+
+    /// If this is set, the stats will be loaded using the provided
+    /// method.
+    ///
+    /// Available: file
+    #[cfg_attr(feature = "influxdb2", doc = ", influxdb")]
+    #[clap(long)]
+    pub load_on_start: Option<StatsSaveMethod>,
+
+    /// The path that the stats should be saved to, and optionally loaded
+    /// from if `load-on-startup` is `file`.
+    pub stats_file: Option<PathBuf>,
+
+    /// The YAML configuration file describing to what influxdb2 the
+    /// stats should be written (over HTTP)
+    #[cfg(feature = "influxdb2")]
+    #[clap(long = "influxdb-config")]
+    stats_influxdb_config: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StatsSaveMethod {
+    File,
+    #[cfg(feature = "influxdb2")]
+    Influxdb,
+}
+
+impl FromStr for StatsSaveMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let method = match s.to_ascii_lowercase().as_str() {
+            "file" => Self::File,
+            #[cfg(feature = "influxdb2")]
+            "influxdb" => Self::Influxdb,
+            _ => return Err(format!("Unknown save method {s}")),
+        };
+        Ok(method)
+    }
+}
+
 macro_rules! map_duration {
     ($val: expr) => {
         $val.map(|d| Duration::from_secs(d))
     };
+}
+
+impl StatsOptions {
+    pub fn stats_save_interval(&self) -> Option<Duration> {
+        self.stats_save_interval_ms.map(Duration::from_millis)
+    }
+}
+
+#[cfg(feature = "influxdb2")]
+impl StatsOptions {
+    pub fn influxdb_config(&self) -> Option<crate::influxdb::InfluxDBOptions> {
+        let config = self.stats_influxdb_config.as_ref()?;
+
+        let file = match std::fs::File::open(config) {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!(
+                    "Could not open influxdb config file (\"{}\"). {e}",
+                    config.as_os_str().to_str().unwrap()
+                );
+                std::process::exit(1);
+            }
+        };
+
+        let options = match serde_yaml::from_reader(file) {
+            Ok(o) => o,
+            Err(e) => {
+                log::error!(
+                    "Failed to parse influxdb config (\"{}\"). {e}",
+                    config.as_os_str().to_str().unwrap()
+                );
+                std::process::exit(1);
+            }
+        };
+
+        Some(options)
+    }
 }
 
 impl Opts {
@@ -96,11 +174,6 @@ impl Opts {
     pub fn size(&self) -> (usize, usize) {
         // TODO: use the current screen size as default here
         (self.width.unwrap_or(800), self.height.unwrap_or(600))
-    }
-
-    /// Get the stats save interval
-    pub fn stats_save_interval(&self) -> Option<Duration> {
-        map_duration!(self.stats_file_interval)
     }
 
     /// Get the stats screen interval
@@ -119,7 +192,8 @@ impl Opts {
         let mut parts = lower_case.split("x");
 
         if parts.clone().count() != 2 {
-            panic!("Invalid stats offset");
+            log::error!("Invalid stats offset");
+            std::process::exit(1);
         }
 
         (
