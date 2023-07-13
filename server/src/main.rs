@@ -25,9 +25,6 @@ use stats::{Stats, StatsRaw};
 
 use crate::arg_handler::Opts;
 
-mod synths;
-pub use synths::{sync_synthetic_client, tokio_synthetic_client};
-
 // TODO: use some constant for new lines
 
 fn main() {
@@ -81,16 +78,8 @@ fn main() {
     let net_running_2 = net_running.clone();
     let opts = arg_handler.clone().into();
 
-    // for _ in 0..16 {
-    //     sync_synthetic_client(pixmap.clone(), stats.clone(), opts);
-    // }
-
     let tokio_runtime = std::thread::spawn(move || {
         runtime.block_on(async move {
-            for _ in 0..16 {
-                tokio_synthetic_client(net_pixmap.clone(), net_stats.clone(), opts);
-            }
-
             listen(listener, net_pixmap, net_stats, opts).await;
             net_running_2.store(false, Ordering::Relaxed);
         })
