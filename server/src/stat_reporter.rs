@@ -38,6 +38,9 @@ pub struct StatReporter {
 
     /// A string mutex for text on the screen.
     screen: Arc<Option<Arc<Mutex<String>>>>,
+
+    host: String,
+    port: u16,
 }
 
 impl StatReporter {
@@ -49,6 +52,8 @@ impl StatReporter {
         save_path: Option<PathBuf>,
         stats: Arc<Stats>,
         screen: Option<Arc<Mutex<String>>>,
+        host: String,
+        port: u16,
     ) -> Self {
         StatReporter {
             screen_interval,
@@ -60,6 +65,8 @@ impl StatReporter {
             save_last: Arc::new(Mutex::new(None)),
             stats,
             screen: Arc::new(screen),
+            host,
+            port,
         }
     }
 
@@ -81,6 +88,8 @@ impl StatReporter {
         let stdout_last = self.stdout_last.clone();
         let save_last = self.save_last.clone();
         let save_path = self.save_path.clone();
+        let host = self.host.clone();
+        let port = self.port;
 
         // Update the statistics text each second in a separate thread
         thread::spawn(move || {
@@ -102,7 +111,7 @@ impl StatReporter {
                     // Report stats to the screen
                     if last.is_none() || elapsed >= interval {
                         if let Some(ref screen) = *screen {
-                            Self::report_screen(&stats, screen);
+                            Self::report_screen(&stats, screen, &host, port);
                             *last = Some(SystemTime::now());
                         }
                     }
@@ -177,12 +186,14 @@ impl StatReporter {
     }
 
     /// Report the stats to the screen.
-    fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>) {
+    fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>, host: &str, port: u16) {
         *screen.lock() = format!(
-            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet localhost 1234        \tin:\t{}\t{}",
+            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet {} {}        \tin:\t{}\t{}",
             stats.pixels_human(),
             stats.pixels_sec_human(),
             stats.clients(),
+            host,
+            port,
             stats.bytes_read_human(),
             stats.bytes_read_sec_human(),
         );

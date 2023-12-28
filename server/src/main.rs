@@ -192,6 +192,9 @@ fn render(
     // Borrow the statistics text
     let stats_text = renderer.stats().text();
 
+    let host = format!("{}", arg_handler.host.ip());
+    let port = arg_handler.host.port();
+
     // Create a stats reporter, and start reporting
     let reporter = StatReporter::new(
         arg_handler.stats_screen_interval(),
@@ -200,6 +203,8 @@ fn render(
         arg_handler.stats_file.clone(),
         stats,
         Some(stats_text),
+        host,
+        port,
     );
     reporter.start();
 
