@@ -82,7 +82,9 @@ under heavy load:
 - Quit as many other running programs.
 
 ## Relevant projects
-* [pixelpwnr (client)][pixelpwnr]
+
+- [pixelpwnr][pixelpwnr]: client to flut (animated) images
+- [pixelpwnr-cast][pixelpwnr-cast]: cast your screen to a pixelflut server
 
 ## License
 This project is released under the GNU GPL-3.0 license.
@@ -93,5 +95,6 @@ Check out the [LICENSE](LICENSE) file for more information.
 [pixelflut]: https://cccgoe.de/wiki/Pixelflut
 [pixelflut-video]: https://vimeo.com/92827556/
 [pixelpwnr]: https://github.com/timvisee/pixelpwnr
+[pixelpwnr-cast]: https://github.com/timvisee/pixelpwnr-cast
 [rust]: https://www.rust-lang.org/
 [rustup]: https://rustup.rs/
