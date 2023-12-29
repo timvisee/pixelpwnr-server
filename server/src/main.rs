@@ -1,4 +1,4 @@
-mod arg_handler;
+mod args;
 mod cmd;
 mod codec;
 mod stat_monitor;
@@ -23,7 +23,7 @@ use codec::{CodecOptions, Lines};
 use stat_reporter::StatReporter;
 use stats::{Stats, StatsRaw};
 
-use crate::arg_handler::Opts;
+use crate::args::Opts;
 
 // TODO: use some constant for new lines
 
