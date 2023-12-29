@@ -29,7 +29,7 @@ cargo install --path server -f
 pixelpwnr-server --help
 
 # or run it directly from Cargo
-cargo run --bin pixelpwnr-server --release -- --help
+cargo run --release -- --help
 ```
 
 Or just build it and invoke the binary directly (Linux/macOS):
