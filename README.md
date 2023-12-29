@@ -1,14 +1,10 @@
 # pixelpwnr server
 
-**Note:** This project is in the prototype phase,
-and is in development and tested with.
-Further optimization of this server for high performance
-use will be done at a later time.
-
 A blazingly fast GPU accelerated [pixelflut][pixelflut] ([video][pixelflut-video])
 server in [Rust][rust].
 
 ## Features
+
 * Blazingly fast pixelflut rendering
 * GPU accelerated
 * Highly concurrent, to support many connections
@@ -16,6 +12,7 @@ server in [Rust][rust].
 * Optional binary PX command for reduced bandwidth requirements (enabled by default).
 
 ## Installation
+
 For installation, Git and Rust cargo are required.
 Install the latest version of Rust with [rustup][rustup].
 
@@ -65,11 +62,13 @@ where:
 * It is important to note that this command does _not_ end in a newline. Appending a newline simply causes the server to interpret that newline as an empty command (which is fine).
 
 ## Requirements
+
 * Rust (MSRV v1.58.1 or higher)
 * Build essentials (Ubuntu package: `build-essential`)
 * `freetype2` development files (Ubuntu package: `libfreetype6-dev`)
 
 ## Performance
+
 Here are some points that help with the pixelflut server performance,
 under heavy load:
 
