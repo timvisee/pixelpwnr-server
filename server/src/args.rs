@@ -36,9 +36,19 @@ pub struct Opts {
     #[clap(long, value_name = "SECONDS", alias = "stats-save-interval")]
     stats_file_interval: Option<u64>,
 
-    /// Reporting interval of stats on screen
-    #[clap(long, value_name = "SECONDS", alias = "stats-screen-interval")]
-    stats_screen: Option<u64>,
+    /// Whether to show real-time stats on the top left [default: true].
+    #[clap(long, action = clap::ArgAction::Set, value_name = "ENABLED", default_value_t = true)]
+    pub stats_enabled: bool,
+
+    /// Reporting interval of stats on screen [default: 1]
+    #[clap(
+        long,
+        value_name = "SECONDS",
+        alias = "stats-screen",
+        alias = "stats-screen-interval",
+        default_value_t = 1.0
+    )]
+    stats_interval: f32,
 
     /// Reporting interval of stats to stdout
     #[clap(
@@ -109,7 +119,8 @@ impl Opts {
 
     /// Get the stats screen interval
     pub fn stats_screen_interval(&self) -> Option<Duration> {
-        map_duration!(self.stats_screen)
+        self.stats_enabled
+            .then_some(Duration::from_secs_f32(self.stats_interval))
     }
 
     /// Get the stats stdout interval
