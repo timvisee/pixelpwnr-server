@@ -192,8 +192,9 @@ fn render(
     // Borrow the statistics text
     let stats_text = renderer.stats().text();
 
-    let host = format!("{}", arg_handler.host.ip());
-    let port = arg_handler.host.port();
+    // Define host to render
+    let host = arg_handler.stats_host.unwrap_or(arg_handler.host);
+    let (host, port) = (host.ip().to_string(), host.port());
 
     // Create a stats reporter, and start reporting
     let reporter = StatReporter::new(

@@ -61,6 +61,10 @@ pub struct Opts {
     #[clap(long, value_name = "XxY", default_value = "10x10", alias = "offset")]
     stats_offset: String,
 
+    /// Custom host to connect to in stats [default: host]
+    #[clap(long, value_name = "DISPLAY_HOST")]
+    pub stats_host: Option<SocketAddr>,
+
     /// Screen stats column spacing
     #[clap(long, alias = "stats-column-spacing", default_value = "20")]
     pub stats_col_spacing: i32,
