@@ -150,7 +150,13 @@ fn handle_socket(
     opts: CodecOptions,
 ) {
     // A client connected, ensure we're able to get it's address
-    let addr = socket.peer_addr().expect("failed to get remote address");
+   let addr = match socket.peer_addr() {
+        Ok(addr) => addr,
+        Err(err) => {
+            eprintln!("Failed to get remote address: {}", err);
+            return; // Terminate the function gracefully
+        }
+    };
     println!("A client connected (from: {})", addr);
 
     // Increase the number of clients
