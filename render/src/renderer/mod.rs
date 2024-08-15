@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gfx::handle::ShaderResourceView;
-use gfx::texture::{AaMode, Kind, Mipmap};
+use gfx::texture::{AaMode, Kind, Mipmap, SamplerInfo};
 use gfx::traits::FactoryExt;
 use gfx_glutin::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
 use glutin::dpi::LogicalSize;
@@ -80,6 +80,7 @@ impl<'a> Renderer<'a> {
     pub fn run(
         mut self,
         fullscreen: bool,
+        nearest_neighbor: bool,
         stats_size: u8,
         stats_offset: (u32, u32),
         stats_padding: i32,
@@ -234,9 +235,16 @@ impl<'a> Renderer<'a> {
             if Instant::now() > next_frame_time || event == Event::MainEventsCleared {
                 let mut pixmap = (*self.pixmap).clone();
 
+                let sampler_info: SamplerInfo = SamplerInfo::new(
+                    match nearest_neighbor {
+                        true => gfx::texture::FilterMethod::Scale,
+                        false => gfx::texture::FilterMethod::Bilinear,
+                    },
+                    gfx::texture::WrapMode::Clamp,
+                );
                 data.image = (
                     Renderer::create_texture(&mut factory, pixmap.as_bytes(), texture_kind),
-                    factory.create_sampler_linear(),
+                    factory.create_sampler(sampler_info),
                 );
 
                 // Clear the buffer
@@ -268,7 +276,15 @@ impl<'a> Renderer<'a> {
 
     /// This will run forever, or until an escape character is input
     pub fn run_default(self) {
-        self.run(false, 20, (10, 10), 12, 20, Arc::new(AtomicBool::new(true)));
+        self.run(
+            false,
+            false,
+            20,
+            (10, 10),
+            12,
+            20,
+            Arc::new(AtomicBool::new(true)),
+        );
     }
 
     pub fn stats(&self) -> &StatsRenderer<F> {
