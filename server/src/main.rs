@@ -150,7 +150,7 @@ fn handle_socket(
     opts: CodecOptions,
 ) {
     // A client connected, ensure we're able to get it's address
-   let addr = match socket.peer_addr() {
+    let addr = match socket.peer_addr() {
         Ok(addr) => addr,
         Err(err) => {
             eprintln!("Failed to get remote address: {}", err);
@@ -218,6 +218,7 @@ fn render(
     // Render the canvas
     renderer.run(
         arg_handler.fullscreen,
+        arg_handler.nearest_neighbor,
         arg_handler.stats_font_size,
         arg_handler.stats_offset(),
         arg_handler.stats_padding,

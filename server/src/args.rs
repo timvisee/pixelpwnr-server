@@ -24,6 +24,10 @@ pub struct Opts {
     #[clap(long)]
     pub no_render: bool,
 
+    /// Render with nearest-neighbor scaling, instead of linear
+    #[clap(short, long)]
+    pub nearest_neighbor: bool,
+
     /// Render in fullscreen
     #[clap(short, long)]
     pub fullscreen: bool,
