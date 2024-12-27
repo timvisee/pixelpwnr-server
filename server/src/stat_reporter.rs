@@ -109,10 +109,30 @@ impl StatReporter {
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
+                    // Temporary test to render public IP
+                    let ips = std::process::Command::new("bash")
+                        .arg("-c")
+                        .arg("ifconfig | grep 'inet ' | grep -E '(151\\.217\\.|94\\.45\\.)' | awk '{ print $2 }'")
+                        .output()
+                        .ok()
+                        .and_then(|ips| String::from_utf8(ips.stdout).ok());
+                    let connect = match ips {
+                        Some(ips) => {
+                            let ips = ips.lines().map(|ip| ip.trim()).collect::<Vec<_>>();
+                            let mut connect =
+                                format!("telnet {} {port}", ips.first().copied().unwrap_or(&host));
+                            if ips.len() > 1 {
+                                connect.push_str(&format!(" (or {})", ips[1..].join(", ")));
+                            }
+                            connect
+                        }
+                        None => format!("telnet {host} {port}"),
+                    };
+
                     // Report stats to the screen
                     if last.is_none() || elapsed >= interval {
                         if let Some(ref screen) = *screen {
-                            Self::report_screen(&stats, screen, &host, port);
+                            Self::report_screen(&stats, screen, &connect);
                             *last = Some(SystemTime::now());
                         }
                     }
@@ -187,14 +207,13 @@ impl StatReporter {
     }
 
     /// Report the stats to the screen.
-    fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>, host: &str, port: u16) {
+    fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>, connect: &str) {
         *screen.lock() = format!(
-            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet {} {}        \tin:\t{}\t{}",
+            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\n{}        \tin:\t{}\t{}",
             stats.pixels_human(),
             stats.pixels_sec_human(),
             stats.clients(),
-            host,
-            port,
+            connect,
             stats.bytes_read_human(),
             stats.bytes_read_sec_human(),
         );
