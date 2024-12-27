@@ -7,6 +7,8 @@ use std::time::{Duration, SystemTime};
 
 use crate::stats::Stats;
 
+const PUBLIC_IP_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
+
 /// A struct that is used to periodically report stats.
 pub struct StatReporter {
     /// The interval to update the screen stats with.
@@ -92,6 +94,9 @@ impl StatReporter {
         let host = self.host.clone();
         let port = self.port;
 
+        let public_ips: Arc<Mutex<Vec<String>>> = Default::default();
+        let public_ips2 = public_ips.clone();
+
         // Update the statistics text each second in a separate thread
         thread::spawn(move || {
             loop {
@@ -109,24 +114,14 @@ impl StatReporter {
                         .unwrap_or(None)
                         .unwrap_or(Duration::from_secs(0));
 
-                    // Temporary test to render public IP
-                    let ips = std::process::Command::new("bash")
-                        .arg("-c")
-                        .arg("ifconfig | grep 'inet ' | grep -E '(151\\.217\\.|94\\.45\\.)' | awk '{ print $2 }'")
-                        .output()
-                        .ok()
-                        .and_then(|ips| String::from_utf8(ips.stdout).ok());
-                    let connect = match ips {
-                        Some(ips) => {
-                            let ips = ips.lines().map(|ip| ip.trim()).collect::<Vec<_>>();
-                            let mut connect =
-                                format!("telnet {} {port}", ips.first().copied().unwrap_or(&host));
-                            if ips.len() > 1 {
-                                connect.push_str(&format!(" (or {})", ips[1..].join(", ")));
-                            }
-                            connect
+                    let connect = match public_ips.lock() {
+                        ips if ips.len() >= 2 => {
+                            format!("telnet {} {port}  (or {})", ips[0], ips[1..].join(", "),)
                         }
-                        None => format!("telnet {host} {port}"),
+                        ips if ips.len() == 1 => {
+                            format!("telnet {} {port}", ips[0],)
+                        }
+                        _ => format!("telnet {host} {port}"),
                     };
 
                     // Report stats to the screen
@@ -203,6 +198,22 @@ impl StatReporter {
                 // Sleep for the specified duration
                 sleep(next_update);
             }
+        });
+
+        // Background task to refresh public IPs
+        thread::spawn(move || loop {
+            let ips = std::process::Command::new("bash")
+                        .arg("-c")
+                        .arg("ifconfig | grep 'inet ' | grep -E '(151\\.217\\.|94\\.45\\.)' | awk '{ print $2 }'")
+                        .output()
+                        .ok()
+                        .and_then(|ips| String::from_utf8(ips.stdout).ok());
+
+            if let Some(ips) = ips {
+                *public_ips2.lock() = ips.lines().map(|ip| ip.trim().to_string()).collect();
+            }
+
+            sleep(PUBLIC_IP_REFRESH_INTERVAL);
         });
     }
 
