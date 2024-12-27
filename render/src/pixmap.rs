@@ -119,7 +119,7 @@ impl Pixmap {
     ///
     /// This data may be used to send to the GPU, as raw texture buffer, for
     /// rendering.
-    pub fn as_bytes<'me>(&'me mut self) -> &[u8] {
+    pub fn as_bytes(&mut self) -> &[u8] {
         let map = &self.map;
 
         let len = map.len() * 4;
