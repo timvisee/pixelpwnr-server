@@ -30,15 +30,17 @@ pub struct FpsCounter {
     last_report: Option<Instant>,
 }
 
-impl FpsCounter {
+impl Default for FpsCounter {
     /// Create a new FPS counter.
-    pub fn new() -> FpsCounter {
-        FpsCounter {
+    fn default() -> Self {
+        Self {
             frames: Vec::with_capacity(FRAME_BUFFER_MAX),
             last_report: None,
         }
     }
+}
 
+impl FpsCounter {
     /// Tick/count a new frame, and report the FPS.
     pub fn tick(&mut self) {
         // Make sure there's enough room in the vector
@@ -61,7 +63,7 @@ impl FpsCounter {
         self.cleanup_frames();
 
         // Make sure we have at least one frame available
-        if self.frames.len() == 0 {
+        if self.frames.is_empty() {
             return None;
         }
 

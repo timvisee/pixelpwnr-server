@@ -23,7 +23,6 @@ impl<R: Resources> PipelineData<R> for RefValuesWrapper {
         _: &mut Manager<R>,
         _: &mut AccessInfo<R>,
     ) {
-        ()
     }
 }
 
@@ -35,7 +34,7 @@ impl<R: Resources> DataBind<R> for RefValuesWrapper {
     }
 }
 
-impl<'a> DataLink<'a> for RefValuesWrapper {
+impl DataLink<'_> for RefValuesWrapper {
     type Init = RefValuesWrapper;
 
     fn new() -> Self {

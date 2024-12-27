@@ -107,6 +107,7 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
     }
 
     /// Initialize the renderer.
+    #[allow(clippy::too_many_arguments)]
     pub fn init(
         &mut self,
         mut factory: F,
@@ -210,30 +211,32 @@ impl<F: Factory<R> + Clone> StatsRenderer<F> {
         );
 
         // Draw the background quad, if there are some bounds
-        if bounds != (0f32, 0f32) {
-            if self.bg_slice.is_some() && self.bg_pso.is_some() && self.bg_data.is_some() {
-                // Get the window dimensions
-                let win = self.window_dimensions.unwrap();
+        if bounds != (0f32, 0f32)
+            && self.bg_slice.is_some()
+            && self.bg_pso.is_some()
+            && self.bg_data.is_some()
+        {
+            // Get the window dimensions
+            let win = self.window_dimensions.unwrap();
 
-                // Determine the position and size of the background quad
-                let w = bounds.0 / win.0 * 2f32;
-                let h = bounds.1 / win.1 * 2f32;
-                let x = -1f32 + self.offset.0 as f32 / win.0 * 2f32;
-                let y = 1f32 - self.offset.1 as f32 / win.1 * 2f32 - h;
+            // Determine the position and size of the background quad
+            let w = bounds.0 / win.0 * 2f32;
+            let h = bounds.1 / win.1 * 2f32;
+            let x = -1f32 + self.offset.0 as f32 / win.0 * 2f32;
+            let y = 1f32 - self.offset.1 as f32 / win.1 * 2f32 - h;
 
-                // Rebuild the vertex buffer and slice data
-                let (vertex_buffer, slice) = create_quad((x, y), (w, h))
-                    .create_vertex_buffer(self.factory.as_mut().unwrap());
+            // Rebuild the vertex buffer and slice data
+            let (vertex_buffer, slice) =
+                create_quad((x, y), (w, h)).create_vertex_buffer(self.factory.as_mut().unwrap());
 
-                *self.bg_slice.as_mut().unwrap() = slice;
-                self.bg_data.as_mut().unwrap().vbuf = vertex_buffer;
+            *self.bg_slice.as_mut().unwrap() = slice;
+            self.bg_data.as_mut().unwrap().vbuf = vertex_buffer;
 
-                encoder.draw(
-                    self.bg_slice.as_ref().unwrap(),
-                    self.bg_pso.as_ref().unwrap(),
-                    self.bg_data.as_ref().unwrap(),
-                );
-            }
+            encoder.draw(
+                self.bg_slice.as_ref().unwrap(),
+                self.bg_pso.as_ref().unwrap(),
+                self.bg_data.as_ref().unwrap(),
+            );
         }
 
         // Draw the text scene

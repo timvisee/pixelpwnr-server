@@ -57,7 +57,7 @@ const BUF_THRESHOLD: usize = 16_000;
 const LINE_MAX_LENGTH: usize = 1024;
 
 /// The prefix used for the Pixel Binary command
-pub const PXB_PREFIX: [u8; 2] = ['P' as u8, 'B' as u8];
+pub const PXB_PREFIX: [u8; 2] = [b'P', b'B'];
 
 /// The size of a single Pixel Binary command.
 ///
@@ -235,7 +235,7 @@ where
         self.last_refill_time = Instant::now();
 
         // We're done reading
-        return Poll::Ready(Ok(self.rd.rd().len()));
+        Poll::Ready(Ok(self.rd.rd().len()))
     }
 
     #[inline(always)]
@@ -249,7 +249,7 @@ where
 
             let is_binary_command = self.opts.allow_binary_cmd
                 && rd_len >= PXB_PREFIX.len()
-                && &rd.data()[..PXB_PREFIX.len()] == PXB_PREFIX;
+                && rd.data()[..PXB_PREFIX.len()] == PXB_PREFIX;
 
             // See if it's the specialized binary command
             let command = if is_binary_command && rd_len >= PXB_CMD_SIZE {
@@ -279,12 +279,8 @@ where
                 if let Some(pos) = pos {
                     // Find how many line ending chars this line ends with
                     let mut newlines = 1;
-                    match rd.data().get(pos + 1) {
-                        Some(b) => match *b {
-                            b'\n' | b'\r' => newlines = 2,
-                            _ => {}
-                        },
-                        _ => {}
+                    if let Some(b'\n' | b'\r') = rd.data().get(pos + 1) {
+                        newlines = 2
                     }
 
                     // Pull the line of the read buffer
@@ -295,7 +291,7 @@ where
                         Ok(cmd) => cmd,
                         Err(e) => {
                             // Report the error to the client
-                            self.buffer(&format!("ERR {}\r\n", e).as_bytes(), cx);
+                            self.buffer(format!("ERR {}\r\n", e).as_bytes(), cx);
                             break Some("Command decoding failed".to_string());
                         }
                     };
@@ -335,7 +331,7 @@ where
                 // Report the error to the user
                 CmdResult::ClientErr(err) => {
                     // Report the error to the client
-                    self.buffer(&format!("ERR {}\r\n", err).as_bytes(), cx);
+                    self.buffer(format!("ERR {}\r\n", err).as_bytes(), cx);
                     break Some(format!("Client error: {}", err));
                 }
 
@@ -385,7 +381,7 @@ where
                 return Poll::Ready(reason.clone());
             }
             if let Some(sleep) = &mut self.rx_wait {
-                if let Poll::Pending = sleep.as_mut().poll(cx) {
+                if sleep.as_mut().poll(cx).is_pending() {
                     return Poll::Pending;
                 } else {
                     self.rx_wait.take();

@@ -34,8 +34,7 @@ fn main() {
     let stats = arg_handler
         .stats_file
         .as_ref()
-        .map(|f| StatsRaw::load(f.as_path()))
-        .flatten()
+        .and_then(|f| StatsRaw::load(f.as_path()))
         .map(|s| Stats::from_raw(&s))
         .unwrap_or(Stats::new());
 
@@ -67,7 +66,7 @@ fn main() {
     // SO_REUSEADDR which means that it won't return an error if another program is
     // already listening on our port/address. Weird.
     let host = arg_handler.host;
-    let listener = match std::net::TcpListener::bind(&host) {
+    let listener = match std::net::TcpListener::bind(host) {
         Ok(v) => v,
         Err(e) => panic!("Failed to bind to address {:?}. Error: {:?}", &host, e),
     };

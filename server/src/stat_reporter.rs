@@ -45,6 +45,7 @@ pub struct StatReporter {
 
 impl StatReporter {
     /// Construct a new stats reporter.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         screen_interval: Option<Duration>,
         stdout_interval: Option<Duration>,
@@ -81,9 +82,9 @@ impl StatReporter {
         // Clone the arcs for use in the reporter thread
         let stats = self.stats.clone();
         let screen = self.screen.clone();
-        let screen_interval = self.screen_interval.clone();
-        let stdout_interval = self.stdout_interval.clone();
-        let save_interval = self.save_interval.clone();
+        let screen_interval = self.screen_interval;
+        let stdout_interval = self.stdout_interval;
+        let save_interval = self.save_interval;
         let screen_last = self.screen_last.clone();
         let stdout_last = self.stdout_last.clone();
         let save_last = self.save_last.clone();

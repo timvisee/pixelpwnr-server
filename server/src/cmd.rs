@@ -60,7 +60,7 @@ impl Cmd {
                         // Color part found, set the pixel command
                         Some(color) => {
                             let color =
-                                Color::from_hex_raw(&color).map_err(|_| "invalid color value")?;
+                                Color::from_hex_raw(color).map_err(|_| "invalid color value")?;
                             Ok(Cmd::SetPixel(x, y, color))
                         }
 
@@ -88,9 +88,9 @@ impl Cmd {
     /// pixel_set_count is a mutable reference to the amount of pixels
     /// that have been set, and will be incremented automatically when
     /// if a pixel is updated successfully.
-    pub fn invoke<'a>(
+    pub fn invoke(
         self,
-        pixmap: &'a Pixmap,
+        pixmap: &Pixmap,
         pixel_set_count: &mut usize,
         codec_opts: &CodecOptions,
     ) -> CmdResult {

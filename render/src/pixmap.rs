@@ -42,7 +42,7 @@ impl Clone for Pixmap {
 
         Self {
             map,
-            dimensions: self.dimensions.clone(),
+            dimensions: self.dimensions,
         }
     }
 }

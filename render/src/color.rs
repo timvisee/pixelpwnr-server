@@ -98,11 +98,11 @@ impl Color {
 
         /// This always returns a value 0 <= v <= 15
         fn parse_char(input: u8) -> Result<u8, ParseColorError> {
-            if input >= b'a' && input <= b'f' {
+            if (b'a'..=b'f').contains(&input) {
                 Ok(input - b'a' + 10)
-            } else if input >= b'A' && input <= b'F' {
+            } else if (b'A'..=b'F').contains(&input) {
                 Ok(input - b'A' + 10)
-            } else if input >= b'0' && input <= b'9' {
+            } else if input.is_ascii_digit() {
                 Ok(input - b'0')
             } else {
                 Err(ParseColorError::InvalidChar(input))
@@ -169,7 +169,7 @@ impl Color {
             r = ((a * r) + (na * self.red())) / 0xFF;
             g = ((a * g) + (na * self.green())) / 0xFF;
             b = ((a * b) + (na * self.blue())) / 0xFF;
-            a = a + self.alpha();
+            a += self.alpha();
         }
         self.value = r & 0xFF | (g & 0xFF) << 8 | (b & 0xFF) << 16 | (a & 0xFF) << 24;
     }

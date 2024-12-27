@@ -253,9 +253,9 @@ impl StatsRaw {
             .expect("failed to read persistent stats from file");
 
         // Load the raw state
-        return serde_yaml::from_str(&data)
+        serde_yaml::from_str(&data)
             .map_err(|_| println!("failed to load persistent stats, malformed data"))
-            .ok();
+            .ok()
     }
 
     /// Save the raw stats to the file at the given path.

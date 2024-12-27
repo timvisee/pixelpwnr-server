@@ -73,10 +73,11 @@ impl<'a> Renderer<'a> {
             pixmap,
             stats: StatsRenderer::new(Corner::TopLeft),
             events_loop: EventLoop::new(),
-            fps: FpsCounter::new(),
+            fps: FpsCounter::default(),
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn run(
         mut self,
         fullscreen: bool,
