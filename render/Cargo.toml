@@ -21,7 +21,7 @@ edition = "2021"
 
 [dependencies]
 gfx = "0.18"
-gfx_text = "0.29"
+gfx_text = "0.33"
 gfx_device_gl = "0.16"
 glutin = "0.28"
 parking_lot = "0.12.0"
