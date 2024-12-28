@@ -202,15 +202,11 @@ impl StatReporter {
 
         // Background task to refresh public IPs
         thread::spawn(move || loop {
-            let ips = std::process::Command::new("bash")
-                        .arg("-c")
-                        .arg("ifconfig | grep 'inet ' | grep -E '(151\\.217\\.|94\\.45\\.)' | awk '{ print $2 }'")
-                        .output()
-                        .ok()
-                        .and_then(|ips| String::from_utf8(ips.stdout).ok());
-
-            if let Some(ips) = ips {
-                *public_ips2.lock() = ips.lines().map(|ip| ip.trim().to_string()).collect();
+            match resolve_public_ips() {
+                Ok(ips) => *public_ips2.lock() = ips,
+                Err(err) => {
+                    eprintln!("Failed to resolve public IPs, retrying in {PUBLIC_IP_REFRESH_INTERVAL:?}: {err}");
+                }
             }
 
             sleep(PUBLIC_IP_REFRESH_INTERVAL);
@@ -248,5 +244,30 @@ impl StatReporter {
             stats.bytes_read_human(),
             stats.bytes_read_sec_human(),
         );
+    }
+}
+
+/// Resolve the public IPs of the current machine.
+///
+/// These IP addresses are shown to the user to allow them to connect to the server.
+// TODO: improve implementation
+fn resolve_public_ips() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("bash")
+        .arg("-c")
+        .arg("ifconfig | grep 'inet ' | grep -E '(151\\.217\\.|94\\.45\\.)' | awk '{ print $2 }'")
+        .output()
+        .map_err(|err| format!("failed to execute command: {err}"))?
+        .stdout;
+
+        let ips = String::from_utf8_lossy(&output);
+
+        Ok(ips.lines().map(|ip| ip.trim().to_string()).collect())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(vec![])
     }
 }
