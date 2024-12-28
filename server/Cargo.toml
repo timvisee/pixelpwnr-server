@@ -17,7 +17,7 @@ categories = [
 edition = "2021"
 
 [dependencies]
-atoi = "1.0"
+atoi = "2.0"
 bufstream = "0.1"
 bytes = "1.1.0"
 clap = { version = "3.1", features = ["derive"] }
@@ -28,8 +28,8 @@ serde = { version = "1.0", features = ["derive"]}
 serde_yaml = "0.9"
 tokio = { version = "1.17", features = ["net", "rt", "rt-multi-thread", "macros", "sync", "time"] }
 parking_lot = "0.12.0"
-image = { version = "0.24", default-features = false, features = [ "png" ] }
-pipebuf = "0.2"
+image = { version = "0.25", default-features = false, features = [ "png" ] }
+pipebuf = "0.3"
 
 [features]
 default = [ ]
