@@ -84,6 +84,7 @@ under heavy load:
 
 - [pixelpwnr][pixelpwnr]: client to flut (animated) images
 - [pixelpwnr-cast][pixelpwnr-cast]: cast your screen to a pixelflut server
+- [pixelpwnr-exporter](https://crates.io/crates/pixelpwnr-exporter): a prometheus metrics exporter for pixelpwnr
 
 ## License
 This project is released under the GNU GPL-3.0 license.
