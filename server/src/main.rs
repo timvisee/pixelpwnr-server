@@ -16,7 +16,7 @@ use std::{
 };
 
 use clap::StructOpt;
-use pixelpwnr_render::{Pixmap, Renderer};
+use pixelpwnr_render::{render_glium::State, Pixmap};
 use tokio::net::{TcpListener, TcpStream};
 
 use codec::{CodecOptions, Lines};
@@ -187,14 +187,8 @@ fn render(
     arg_handler: &Opts,
     pixmap: Arc<Pixmap>,
     stats: Arc<Stats>,
-    net_running: Arc<AtomicBool>,
+    _net_running: Arc<AtomicBool>,
 ) {
-    // Build the renderer
-    let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
-
-    // Borrow the statistics text
-    let stats_text = Some(renderer.stats().text());
-
     // Define host to render
     let host = arg_handler.stats_host.unwrap_or(arg_handler.host);
     let (host, port) = (host.ip().to_string(), host.port());
@@ -206,20 +200,13 @@ fn render(
         arg_handler.stats_save_interval(),
         arg_handler.stats_file.clone(),
         stats,
-        stats_text,
         host,
         port,
     );
     reporter.start();
 
-    // Render the canvas
-    renderer.run(
-        arg_handler.fullscreen,
-        arg_handler.nearest_neighbor,
-        arg_handler.stats_font_size,
-        arg_handler.stats_offset(),
-        arg_handler.stats_padding,
-        arg_handler.stats_col_spacing,
-        net_running,
+    State::<pixelpwnr_render::render_glium::Application>::run_loop(
+        pixmap.clone(),
+        reporter.screen.clone(),
     );
 }

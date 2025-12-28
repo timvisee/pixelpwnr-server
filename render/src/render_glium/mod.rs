@@ -1,3 +1,5 @@
+pub mod stats;
+
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
@@ -8,6 +10,7 @@ use glium::{Display, Surface};
 use glutin_new::display::{GetGlDisplay, GlDisplay};
 use glutin_new::prelude::NotCurrentGlContext;
 use glutin_new::surface::WindowSurface;
+use parking_lot::Mutex;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
@@ -17,12 +20,15 @@ use winit::window::{WindowId, WindowLevel};
 
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
+use crate::render_glium::stats::StatsRender;
 
 /// Whether to clear to black each frame.
 const CLEAR_FRAME: bool = false;
 
 /// Whether to recreate the OpenGL texture each frame
 const RECREATE_TEXTURE: bool = false;
+
+type StatsText = Arc<Mutex<String>>;
 
 #[derive(Copy, Clone)]
 struct Vertex {
@@ -44,6 +50,7 @@ pub struct State<T> {
     context: T,
     pixmap: Arc<Pixmap>,
     fps: FpsCounter,
+    stats: StatsRender,
 }
 
 /// Based upon <https://github.com/glium/glium/blob/master/examples/image.rs>
@@ -52,6 +59,7 @@ struct App<T> {
     visible: bool,
     close_requested: bool,
     pixmap: Arc<Pixmap>,
+    stats_text: StatsText,
 }
 
 impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
@@ -59,7 +67,12 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
     ///
     /// For convenience sake, this is also called on all other platforms.
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.state = Some(State::new(event_loop, self.visible, self.pixmap.clone()));
+        self.state = Some(State::new(
+            event_loop,
+            self.visible,
+            self.pixmap.clone(),
+            self.stats_text.clone(),
+        ));
         if !self.visible && self.close_requested {
             event_loop.exit();
         }
@@ -87,7 +100,9 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
             glium::winit::event::WindowEvent::RedrawRequested => {
                 if let Some(state) = &mut self.state {
                     state.context.update();
-                    state.context.draw_frame(&state.display, &state.pixmap);
+                    state
+                        .context
+                        .draw_frame(&state.display, &state.pixmap, &state.stats);
                     state.fps.tick();
                     if self.close_requested {
                         event_loop.exit();
@@ -128,6 +143,7 @@ impl<T: ApplicationContext + 'static> State<T> {
         event_loop: &glium::winit::event_loop::ActiveEventLoop,
         visible: bool,
         pixmap: Arc<Pixmap>,
+        stats_text: StatsText,
     ) -> Self {
         let window_attributes = winit::window::Window::default_attributes()
             .with_title(T::WINDOW_TITLE)
@@ -200,13 +216,14 @@ impl<T: ApplicationContext + 'static> State<T> {
         let current_context = not_current_gl_context.make_current(&surface).unwrap();
         let display = glium::Display::from_context_surface(current_context, surface).unwrap();
 
-        Self::from_display_window(display, window, pixmap)
+        Self::from_display_window(display, window, pixmap, stats_text)
     }
 
     pub fn from_display_window(
         display: glium::Display<WindowSurface>,
         window: glium::winit::window::Window,
         pixmap: Arc<Pixmap>,
+        stats_text: StatsText,
     ) -> Self {
         let context = T::new(&display, &pixmap);
         Self {
@@ -215,11 +232,12 @@ impl<T: ApplicationContext + 'static> State<T> {
             context,
             pixmap,
             fps: FpsCounter::default(),
+            stats: StatsRender::new(stats_text),
         }
     }
 
     /// Start the event_loop and keep rendering frames until the program is closed
-    pub fn run_loop(pixmap: Arc<Pixmap>) {
+    pub fn run_loop(pixmap: Arc<Pixmap>, stats_text: StatsText) {
         let event_loop = glium::winit::event_loop::EventLoop::builder()
             .build()
             .expect("glium event loop building");
@@ -228,6 +246,7 @@ impl<T: ApplicationContext + 'static> State<T> {
             visible: true,
             close_requested: false,
             pixmap,
+            stats_text,
         };
         let result = event_loop.run_app(&mut app);
         result.unwrap();
@@ -235,7 +254,13 @@ impl<T: ApplicationContext + 'static> State<T> {
 }
 
 pub trait ApplicationContext {
-    fn draw_frame(&mut self, _display: &Display<WindowSurface>, _pixmap: &Pixmap) {}
+    fn draw_frame(
+        &mut self,
+        _display: &Display<WindowSurface>,
+        _pixmap: &Pixmap,
+        _stats: &StatsRender,
+    ) {
+    }
     fn new(display: &Display<WindowSurface>, pixmap: &Pixmap) -> Self;
     fn update(&mut self) {}
     fn handle_window_event(
@@ -378,7 +403,12 @@ impl ApplicationContext for Application {
         }
     }
 
-    fn draw_frame(&mut self, display: &Display<WindowSurface>, pixmap: &Pixmap) {
+    fn draw_frame(
+        &mut self,
+        display: &Display<WindowSurface>,
+        pixmap: &Pixmap,
+        stats: &StatsRender,
+    ) {
         let mut frame = display.draw();
 
         let width = pixmap.width() as u32;
@@ -434,6 +464,9 @@ impl ApplicationContext for Application {
                 &Default::default(),
             )
             .unwrap();
+
+        stats.draw(display, &mut frame);
+
         frame.finish().unwrap();
     }
 }

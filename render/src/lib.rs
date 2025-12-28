@@ -1,15 +1,8 @@
 pub mod color;
 pub mod fps_counter;
-mod model;
 pub mod pixmap;
-mod primitive;
 pub mod render_glium;
-pub mod renderer;
-#[cfg(feature = "stats")]
-pub use renderer::stats_renderer;
-mod vertex;
 
 // Reexport types
 pub use color::Color;
 pub use pixmap::{Pixmap, PixmapErr};
-pub use renderer::Renderer;

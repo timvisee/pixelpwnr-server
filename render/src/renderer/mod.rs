@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 mod ref_values;
 #[cfg(feature = "stats")]
 pub mod stats_renderer;
