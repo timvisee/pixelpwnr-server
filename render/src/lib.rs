@@ -4,6 +4,7 @@ mod model;
 pub mod pixmap;
 mod primitive;
 pub mod renderer;
+#[cfg(feature = "stats")]
 pub use renderer::stats_renderer;
 mod vertex;
 

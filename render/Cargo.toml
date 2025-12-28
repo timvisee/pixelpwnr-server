@@ -19,6 +19,10 @@ edition = "2021"
 
 [lib]
 
+[features]
+default = ["stats"]
+stats = []
+
 [dependencies]
 gfx = "0.18"
 gfx_text = "0.33"

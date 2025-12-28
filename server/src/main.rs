@@ -195,7 +195,7 @@ fn render(
     let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
 
     // Borrow the statistics text
-    let stats_text = renderer.stats().text();
+    let stats_text = Some(renderer.stats().text());
 
     // Define host to render
     let host = arg_handler.stats_host.unwrap_or(arg_handler.host);
@@ -208,7 +208,7 @@ fn render(
         arg_handler.stats_save_interval(),
         arg_handler.stats_file.clone(),
         stats,
-        Some(stats_text),
+        stats_text,
         host,
         port,
     );

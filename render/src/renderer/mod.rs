@@ -1,11 +1,12 @@
 mod ref_values;
+#[cfg(feature = "stats")]
 pub mod stats_renderer;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use gfx::handle::ShaderResourceView;
+use gfx::handle::{DepthStencilView, ShaderResourceView};
 use gfx::texture::{AaMode, Kind, Mipmap, SamplerInfo};
 use gfx::traits::FactoryExt;
 use gfx_glutin::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
@@ -22,6 +23,7 @@ use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
 use crate::primitive::create_quad_max;
 use crate::vertex::Vertex;
+#[cfg(feature = "stats")]
 use stats_renderer::{Corner, StatsRenderer};
 
 /// Define used types
@@ -79,13 +81,13 @@ impl<'a> Renderer<'a> {
 
     #[allow(clippy::too_many_arguments)]
     pub fn run(
-        mut self,
+        #[allow(unused_mut)] mut self,
         fullscreen: bool,
         nearest_neighbor: bool,
-        stats_size: u8,
-        stats_offset: (u32, u32),
-        stats_padding: i32,
-        stats_col_spacing: i32,
+        #[cfg(feature = "stats")] stats_size: u8,
+        #[cfg(feature = "stats")] stats_offset: (u32, u32),
+        #[cfg(feature = "stats")] stats_padding: i32,
+        #[cfg(feature = "stats")] stats_col_spacing: i32,
         keep_running: Arc<AtomicBool>,
     ) {
         // Get the size of the canvas
@@ -110,18 +112,23 @@ impl<'a> Renderer<'a> {
 
         // Define the graphics context
         // TODO: properly configure this context
-        let (window, mut device, mut factory, mut main_color, mut main_depth) =
-            ContextBuilder::new()
-                .with_srgb(true)
-                .with_gl(GlRequest::Latest)
-                .with_gl_robustness(Robustness::TryRobustNoResetNotification)
-                .with_gl_profile(GlProfile::Core)
-                .with_multisampling(1)
-                .with_gfx_color_depth::<ColorFormat, DepthFormat>()
-                .with_vsync(true)
-                .build_windowed(builder, &self.events_loop)
-                .unwrap()
-                .init_gfx();
+        let (window, mut device, mut factory, mut main_color, mut main_depth): (
+            _,
+            _,
+            _,
+            _,
+            DepthStencilView<R, DepthFormat>,
+        ) = ContextBuilder::new()
+            .with_srgb(true)
+            .with_gl(GlRequest::Latest)
+            .with_gl_robustness(Robustness::TryRobustNoResetNotification)
+            .with_gl_profile(GlProfile::Core)
+            .with_multisampling(1)
+            .with_gfx_color_depth::<ColorFormat, DepthFormat>()
+            .with_vsync(true)
+            .build_windowed(builder, &self.events_loop)
+            .unwrap()
+            .init_gfx();
 
         let my_window_id = window.window().id();
 
@@ -166,20 +173,23 @@ impl<'a> Renderer<'a> {
             out: main_color.clone(),
         };
 
-        let dimensions = (size.0 as f32, size.1 as f32);
+        #[cfg(feature = "stats")]
         // Build the stats renderer
-        self.stats
-            .init(
-                factory.clone(),
-                dimensions,
-                main_color.clone(),
-                main_depth.clone(),
-                stats_size,
-                stats_offset,
-                stats_padding,
-                stats_col_spacing,
-            )
-            .expect("failed to initialize stats text renderer");
+        {
+            let dimensions = (size.0 as f32, size.1 as f32);
+            self.stats
+                .init(
+                    factory.clone(),
+                    dimensions,
+                    main_color.clone(),
+                    main_depth.clone(),
+                    stats_size,
+                    stats_offset,
+                    stats_padding,
+                    stats_col_spacing,
+                )
+                .expect("failed to initialize stats text renderer");
+        }
 
         let mut next_frame_time = Instant::now();
 
@@ -216,11 +226,11 @@ impl<'a> Renderer<'a> {
             let exit = keycode == Some(VirtualKeyCode::Escape) || is_close_request;
 
             if let Event::WindowEvent {
-                event: WindowEvent::Resized(s),
+                #[allow(unused_variables)]
+                    event: WindowEvent::Resized(s),
                 ..
             } = event
             {
-                let dimensions = (s.width as f32, s.height as f32);
                 // Update the main color and depth
                 window.update_gfx(&mut main_color, &mut main_depth);
 
@@ -228,7 +238,11 @@ impl<'a> Renderer<'a> {
                 window.update_gfx(&mut data.out, &mut data_depth);
 
                 // Update the stats text
-                self.stats.update_views(&window, dimensions);
+                #[cfg(feature = "stats")]
+                {
+                    let dimensions = (s.width as f32, s.height as f32);
+                    self.stats.update_views(&window, dimensions);
+                }
             }
 
             // We don't want to re-render the whole frame each time someone moves their mouse, so let's
@@ -255,6 +269,7 @@ impl<'a> Renderer<'a> {
                 encoder.draw(&slice, &pso, &data);
 
                 // Draw the stats
+                #[cfg(feature = "stats")]
                 self.stats.draw(&mut encoder, &main_color).unwrap();
 
                 encoder.flush(&mut device);
@@ -280,9 +295,13 @@ impl<'a> Renderer<'a> {
         self.run(
             false,
             false,
+            #[cfg(feature = "stats")]
             20,
+            #[cfg(feature = "stats")]
             (10, 10),
+            #[cfg(feature = "stats")]
             12,
+            #[cfg(feature = "stats")]
             20,
             Arc::new(AtomicBool::new(true)),
         );
