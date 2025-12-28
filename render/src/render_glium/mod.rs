@@ -7,9 +7,9 @@ use glium::index::PrimitiveType;
 use glium::texture::RawImage2d;
 use glium::{implement_vertex, program, uniform};
 use glium::{Display, Surface};
-use glutin_new::display::{GetGlDisplay, GlDisplay};
-use glutin_new::prelude::NotCurrentGlContext;
-use glutin_new::surface::WindowSurface;
+use glutin::display::{GetGlDisplay, GlDisplay};
+use glutin::prelude::NotCurrentGlContext;
+use glutin::surface::WindowSurface;
 use parking_lot::Mutex;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -157,7 +157,7 @@ impl<T: ApplicationContext + 'static> State<T> {
                 pixmap.height() as u32,
             ))
             .with_visible(visible);
-        let config_template_builder = glutin_new::config::ConfigTemplateBuilder::new();
+        let config_template_builder = glutin::config::ConfigTemplateBuilder::new();
         let display_builder =
             glutin_winit::DisplayBuilder::new().with_window_attributes(Some(window_attributes));
 
@@ -177,9 +177,9 @@ impl<T: ApplicationContext + 'static> State<T> {
             .window_handle()
             .expect("couldn't obtain window handle");
         let context_attributes =
-            glutin_new::context::ContextAttributesBuilder::new().build(Some(window_handle.into()));
-        let fallback_context_attributes = glutin_new::context::ContextAttributesBuilder::new()
-            .with_context_api(glutin_new::context::ContextApi::Gles(None))
+            glutin::context::ContextAttributesBuilder::new().build(Some(window_handle.into()));
+        let fallback_context_attributes = glutin::context::ContextAttributesBuilder::new()
+            .with_context_api(glutin::context::ContextApi::Gles(None))
             .build(Some(window_handle.into()));
 
         let not_current_gl_context = unsafe {
@@ -201,7 +201,7 @@ impl<T: ApplicationContext + 'static> State<T> {
             (pixmap.width() as u32, pixmap.height() as u32)
         };
 
-        let attrs = glutin_new::surface::SurfaceAttributesBuilder::<WindowSurface>::new().build(
+        let attrs = glutin::surface::SurfaceAttributesBuilder::<WindowSurface>::new().build(
             window_handle.into(),
             NonZeroU32::new(width).unwrap(),
             NonZeroU32::new(height).unwrap(),

@@ -29,14 +29,6 @@ draw_state = "0.8"
 
 glium = "0.36"
 glium-glyph = { version = "*", path = "/home/timvisee/tmp/glium-glyph" }
-# TODO: rename to glutin
-glutin_new = { version = "0.32", package = "glutin" }
+glutin = "0.32"
 glutin-winit = "0.5"
 winit = "0.30"
-
-# TODO: remove:
-gfx = "0.18"
-gfx_text = "0.33"
-gfx_device_gl = "0.16"
-glutin = "0.28"
-old_school_gfx_glutin_ext = "0.28"
