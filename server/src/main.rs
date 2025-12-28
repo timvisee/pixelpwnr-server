@@ -126,8 +126,6 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
 
         let (width, height) = pixmap.dimensions();
 
-        let mut pixmap = (*pixmap).clone();
-
         image::save_buffer(
             path,
             pixmap.as_bytes(),
