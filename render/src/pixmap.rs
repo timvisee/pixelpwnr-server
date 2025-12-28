@@ -80,14 +80,14 @@ impl Pixmap {
     }
 
     /// Get the pixel at the given coordinate, as color.
-    pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr> {
+    pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr<'_>> {
         let pixel_index = self.pixel_index(x, y)?;
         let pixel_value = self.map[pixel_index].load(Ordering::Relaxed);
         Ok(Color::new(pixel_value))
     }
 
     /// Set the pixel at the given coordinate, to the given color.
-    pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
+    pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr<'_>> {
         let pixel_index = self.pixel_index(x, y)?;
 
         // A data race can occur here: if two separate threads update the pixel at the same time,
@@ -100,7 +100,7 @@ impl Pixmap {
     }
 
     /// Get the index a pixel is at, for the given coordinate.
-    fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr> {
+    fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr<'_>> {
         // Check pixel bounds
         if x >= self.dimensions.0 {
             return Err(PixmapErr::OutOfBound("x coordinate out of bound"));
