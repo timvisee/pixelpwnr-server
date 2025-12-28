@@ -208,7 +208,7 @@ fn from_hex_raw() {
             let color = Color::from_hex($in).unwrap();
             assert_eq!(color, color_raw);
             assert_eq!(Color::new($out), color_raw);
-            assert_eq!(format!("{:?}", color_raw), $print);
+            assert_eq!(format!("{color_raw:?}"), $print);
         };
     }
 

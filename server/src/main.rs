@@ -42,7 +42,7 @@ fn main() {
 
     let (width, height) = arg_handler.size();
     let pixmap = Arc::new(Pixmap::new(width, height));
-    println!("Canvas size: {}x{}", width, height);
+    println!("Canvas size: {width}x{height}");
 
     // Create a new runtime to be ran on a different (set of) OS threads
     // so that we don't block the runtime by running the renderer on it
@@ -68,9 +68,9 @@ fn main() {
     let host = arg_handler.host;
     let listener = match std::net::TcpListener::bind(host) {
         Ok(v) => v,
-        Err(e) => panic!("Failed to bind to address {:?}. Error: {:?}", &host, e),
+        Err(e) => panic!("Failed to bind to address {host:?}. Error: {e:?}"),
     };
-    println!("Listening on: {}", host);
+    println!("Listening on: {host}");
 
     let net_pixmap = pixmap.clone();
     let net_stats = stats.clone();
@@ -122,7 +122,7 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
             .as_secs();
 
         let mut path = dir.clone();
-        path.push(format!("{}.png", now));
+        path.push(format!("{now}.png"));
 
         let (width, height) = pixmap.dimensions();
 
@@ -150,11 +150,11 @@ fn handle_socket(
     let addr = match socket.peer_addr() {
         Ok(addr) => addr,
         Err(err) => {
-            eprintln!("Failed to get remote address: {}", err);
+            eprintln!("Failed to get remote address: {err}");
             return; // Terminate the function gracefully
         }
     };
-    println!("A client connected (from: {})", addr);
+    println!("A client connected (from: {addr})");
 
     // Increase the number of clients
     stats.inc_clients();
@@ -175,7 +175,7 @@ fn handle_socket(
         let result = lines.await;
 
         // Print a disconnect message
-        println!("A client disconnected (from: {}). Reason: {}", addr, result);
+        println!("A client disconnected (from: {addr}). Reason: {result}");
 
         // Decreasde the client connections number
         disconnect_stats.dec_clients();

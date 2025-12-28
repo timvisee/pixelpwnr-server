@@ -106,7 +106,7 @@ impl FpsCounter {
         // Calculate the FPS
         if let Some(fps) = self.calculate_fps() {
             // Report the FPS
-            println!("FPS: {:.1}", fps);
+            println!("FPS: {fps:.1}");
 
             // Set the last report time
             self.last_report = Some(Instant::now());

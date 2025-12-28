@@ -115,7 +115,7 @@ impl Cmd {
                 };
 
                 // Send the response
-                return CmdResult::Response(format!("PX {} {} {}", x, y, color));
+                return CmdResult::Response(format!("PX {x} {y} {color}"));
             }
 
             // Get the size of the screen
@@ -124,7 +124,7 @@ impl Cmd {
                 let (x, y) = pixmap.dimensions();
 
                 // Send the response
-                return CmdResult::Response(format!("SIZE {} {}", x, y));
+                return CmdResult::Response(format!("SIZE {x} {y}"));
             }
 
             // Show help
@@ -153,7 +153,7 @@ impl Cmd {
             HELP - HELP         >>  HELP ...\
             ",
             env!("CARGO_PKG_NAME"),
-            env!("CARGO_PKG_VERSION")
+            env!("CARGO_PKG_VERSION"),
         );
 
         if opts.allow_binary_cmd {
@@ -166,8 +166,7 @@ impl Cmd {
 
         if let Some(RateLimit::BitsPerSecond { limit }) = opts.rate_limit {
             help.push_str(&format!(
-                "\r\nHELP - Input from a single client is limited to {} bits per second",
-                limit
+                "\r\nHELP - Input from a single client is limited to {limit} bits per second",
             ));
         }
 
