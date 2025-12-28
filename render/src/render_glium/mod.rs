@@ -18,6 +18,12 @@ use winit::window::{WindowId, WindowLevel};
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
 
+/// Whether to clear to black each frame.
+const CLEAR_FRAME: bool = false;
+
+/// Whether to recreate the OpenGL texture each frame
+const RECREATE_TEXTURE: bool = false;
+
 #[derive(Copy, Clone)]
 struct Vertex {
     position: [f32; 2],
@@ -40,6 +46,7 @@ pub struct State<T> {
     fps: FpsCounter,
 }
 
+/// Based upon <https://github.com/glium/glium/blob/master/examples/image.rs>
 struct App<T> {
     state: Option<State<T>>,
     visible: bool,
@@ -248,7 +255,14 @@ impl ApplicationContext for Application {
         let height = pixmap.height() as u32;
 
         // Create base OpenGL texture
-        let opengl_texture = glium::texture::Texture2d::empty(display, width, height).unwrap();
+        let opengl_texture = glium::texture::Texture2d::empty_with_format(
+            display,
+            glium::texture::UncompressedFloatFormat::U8U8U8U8,
+            glium::texture::MipmapsOption::NoMipmap,
+            width,
+            height,
+        )
+        .unwrap();
 
         // Build vertex buffer, contains all the vertices we will draw
         let vertex_buffer = {
@@ -371,6 +385,18 @@ impl ApplicationContext for Application {
         let height = pixmap.height() as u32;
         let pixels = pixmap.as_bytes();
 
+        // Create base OpenGL texture
+        if RECREATE_TEXTURE {
+            self.opengl_texture = glium::texture::Texture2d::empty_with_format(
+                display,
+                glium::texture::UncompressedFloatFormat::U8U8U8U8,
+                glium::texture::MipmapsOption::NoMipmap,
+                width,
+                height,
+            )
+            .unwrap();
+        }
+
         // Dump new image to OpenGL texture
         let raw_image = RawImage2d::from_raw_rgba_reversed(pixels, (width, height));
         self.opengl_texture.write(
@@ -395,7 +421,9 @@ impl ApplicationContext for Application {
         };
 
         // Clearing the frame is not required since we always draw the image full screen
-        // frame.clear_color(0.0, 0.0, 0.0, 0.0);
+        if CLEAR_FRAME {
+            frame.clear_color(0.0, 0.0, 0.0, 0.0);
+        }
 
         frame
             .draw(
