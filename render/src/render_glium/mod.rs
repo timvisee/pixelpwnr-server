@@ -1,0 +1,411 @@
+use std::num::NonZeroU32;
+use std::sync::Arc;
+
+use glium::index::PrimitiveType;
+use glium::texture::RawImage2d;
+use glium::{implement_vertex, program, uniform};
+use glium::{Display, Surface};
+use glutin_new::display::{GetGlDisplay, GlDisplay};
+use glutin_new::prelude::NotCurrentGlContext;
+use glutin_new::surface::WindowSurface;
+use winit::application::ApplicationHandler;
+use winit::dpi::LogicalSize;
+use winit::event::WindowEvent;
+use winit::event_loop::ActiveEventLoop;
+use winit::raw_window_handle::HasWindowHandle;
+use winit::window::{WindowId, WindowLevel};
+
+use crate::fps_counter::FpsCounter;
+use crate::pixmap::Pixmap;
+
+#[derive(Copy, Clone)]
+struct Vertex {
+    position: [f32; 2],
+    tex_coords: [f32; 2],
+}
+implement_vertex!(Vertex, position, tex_coords);
+
+pub struct Application {
+    vertex_buffer: glium::VertexBuffer<Vertex>,
+    index_buffer: glium::IndexBuffer<u16>,
+    opengl_texture: glium::texture::Texture2d,
+    program: glium::Program,
+}
+
+pub struct State<T> {
+    display: glium::Display<WindowSurface>,
+    window: glium::winit::window::Window,
+    context: T,
+    pixmap: Arc<Pixmap>,
+    fps: FpsCounter,
+}
+
+struct App<T> {
+    state: Option<State<T>>,
+    visible: bool,
+    close_requested: bool,
+    pixmap: Arc<Pixmap>,
+}
+
+impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
+    /// Resume handler mostly for Android compatibility
+    ///
+    /// For convenience sake, this is also called on all other platforms.
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.state = Some(State::new(event_loop, self.visible, self.pixmap.clone()));
+        if !self.visible && self.close_requested {
+            event_loop.exit();
+        }
+    }
+
+    /// Suspend handler mostly for Android compatibility
+    ///
+    /// For convenience sake, this is also called on all other platforms.
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        self.state = None;
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            glium::winit::event::WindowEvent::Resized(new_size) => {
+                if let Some(state) = &self.state {
+                    state.display.resize(new_size.into());
+                }
+            }
+            glium::winit::event::WindowEvent::RedrawRequested => {
+                if let Some(state) = &mut self.state {
+                    state.context.update();
+                    state.context.draw_frame(&state.display, &state.pixmap);
+                    state.fps.tick();
+                    if self.close_requested {
+                        event_loop.exit();
+                    }
+                }
+            }
+            // Exit the event loop when requested (by closing the window for example) or when
+            // pressing the Esc key.
+            glium::winit::event::WindowEvent::CloseRequested
+            | glium::winit::event::WindowEvent::KeyboardInput {
+                event:
+                    glium::winit::event::KeyEvent {
+                        state: glium::winit::event::ElementState::Pressed,
+                        logical_key:
+                            glium::winit::keyboard::Key::Named(glium::winit::keyboard::NamedKey::Escape),
+                        ..
+                    },
+                ..
+            } => event_loop.exit(),
+            // Every other event
+            ev => {
+                if let Some(state) = &mut self.state {
+                    state.context.handle_window_event(&ev, &state.window);
+                }
+            }
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(state) = &self.state {
+            state.window.request_redraw();
+        }
+    }
+}
+
+impl<T: ApplicationContext + 'static> State<T> {
+    pub fn new(
+        event_loop: &glium::winit::event_loop::ActiveEventLoop,
+        visible: bool,
+        pixmap: Arc<Pixmap>,
+    ) -> Self {
+        let window_attributes = winit::window::Window::default_attributes()
+            .with_title(T::WINDOW_TITLE)
+            .with_active(true)
+            .with_window_level(WindowLevel::AlwaysOnTop)
+            // Full screen on current monitor
+            //.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+            // Base window size on pixmap
+            .with_inner_size(LogicalSize::new(
+                pixmap.width() as u32,
+                pixmap.height() as u32,
+            ))
+            .with_visible(visible);
+        let config_template_builder = glutin_new::config::ConfigTemplateBuilder::new();
+        let display_builder =
+            glutin_winit::DisplayBuilder::new().with_window_attributes(Some(window_attributes));
+
+        // First we create a window
+        let (window, gl_config) = display_builder
+            .build(event_loop, config_template_builder, |mut configs| {
+                // Just use the first configuration since we don't have any special preferences here
+                configs.next().unwrap()
+            })
+            .unwrap();
+        let window = window.unwrap();
+
+        // Then the configuration which decides which OpenGL version we'll end up using, here we just use the default which is currently 3.3 core
+        // When this fails we'll try and create an ES context, this is mainly used on mobile devices or various ARM SBC's
+        // If you depend on features available in modern OpenGL Versions you need to request a specific, modern, version. Otherwise things will very likely fail.
+        let window_handle = window
+            .window_handle()
+            .expect("couldn't obtain window handle");
+        let context_attributes =
+            glutin_new::context::ContextAttributesBuilder::new().build(Some(window_handle.into()));
+        let fallback_context_attributes = glutin_new::context::ContextAttributesBuilder::new()
+            .with_context_api(glutin_new::context::ContextApi::Gles(None))
+            .build(Some(window_handle.into()));
+
+        let not_current_gl_context = unsafe {
+            gl_config
+                .display()
+                .create_context(&gl_config, &context_attributes)
+                .unwrap_or_else(|_| {
+                    gl_config
+                        .display()
+                        .create_context(&gl_config, &fallback_context_attributes)
+                        .expect("failed to create context")
+                })
+        };
+
+        // Determine our framebuffer size based on the window size, or default to pixmap size if invisible
+        let (width, height): (u32, u32) = if visible {
+            window.inner_size().into()
+        } else {
+            (pixmap.width() as u32, pixmap.height() as u32)
+        };
+
+        let attrs = glutin_new::surface::SurfaceAttributesBuilder::<WindowSurface>::new().build(
+            window_handle.into(),
+            NonZeroU32::new(width).unwrap(),
+            NonZeroU32::new(height).unwrap(),
+        );
+        // Now we can create our surface, use it to make our context current and finally create our display
+        let surface = unsafe {
+            gl_config
+                .display()
+                .create_window_surface(&gl_config, &attrs)
+                .unwrap()
+        };
+        let current_context = not_current_gl_context.make_current(&surface).unwrap();
+        let display = glium::Display::from_context_surface(current_context, surface).unwrap();
+
+        Self::from_display_window(display, window, pixmap)
+    }
+
+    pub fn from_display_window(
+        display: glium::Display<WindowSurface>,
+        window: glium::winit::window::Window,
+        pixmap: Arc<Pixmap>,
+    ) -> Self {
+        let context = T::new(&display, &pixmap);
+        Self {
+            display,
+            window,
+            context,
+            pixmap,
+            fps: FpsCounter::default(),
+        }
+    }
+
+    /// Start the event_loop and keep rendering frames until the program is closed
+    pub fn run_loop(pixmap: Arc<Pixmap>) {
+        let event_loop = glium::winit::event_loop::EventLoop::builder()
+            .build()
+            .expect("glium event loop building");
+        let mut app = App::<T> {
+            state: None,
+            visible: true,
+            close_requested: false,
+            pixmap,
+        };
+        let result = event_loop.run_app(&mut app);
+        result.unwrap();
+    }
+}
+
+pub trait ApplicationContext {
+    fn draw_frame(&mut self, _display: &Display<WindowSurface>, _pixmap: &Pixmap) {}
+    fn new(display: &Display<WindowSurface>, pixmap: &Pixmap) -> Self;
+    fn update(&mut self) {}
+    fn handle_window_event(
+        &mut self,
+        _event: &glium::winit::event::WindowEvent,
+        _window: &glium::winit::window::Window,
+    ) {
+    }
+    const WINDOW_TITLE: &'static str;
+}
+
+impl ApplicationContext for Application {
+    const WINDOW_TITLE: &'static str = env!("CARGO_PKG_NAME");
+
+    fn new(display: &Display<WindowSurface>, pixmap: &Pixmap) -> Self {
+        let width = pixmap.width() as u32;
+        let height = pixmap.height() as u32;
+
+        // Create base OpenGL texture
+        let opengl_texture = glium::texture::Texture2d::empty(display, width, height).unwrap();
+
+        // Build vertex buffer, contains all the vertices we will draw
+        let vertex_buffer = {
+            glium::VertexBuffer::new(
+                display,
+                &[
+                    Vertex {
+                        position: [-1.0, -1.0],
+                        tex_coords: [0.0, 0.0],
+                    },
+                    Vertex {
+                        position: [-1.0, 1.0],
+                        tex_coords: [0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [1.0, 1.0],
+                        tex_coords: [1.0, 1.0],
+                    },
+                    Vertex {
+                        position: [1.0, -1.0],
+                        tex_coords: [1.0, 0.0],
+                    },
+                ],
+            )
+            .unwrap()
+        };
+
+        // building the index buffer
+        let index_buffer =
+            glium::IndexBuffer::new(display, PrimitiveType::TriangleStrip, &[1u16, 2, 0, 3])
+                .unwrap();
+
+        // Compile shaders and link them
+        let program = program!(display,
+            140 => {
+                vertex: "
+                    #version 140
+                    uniform mat4 matrix;
+                    in vec2 position;
+                    in vec2 tex_coords;
+                    out vec2 v_tex_coords;
+                    void main() {
+                        gl_Position = matrix * vec4(position, 0.0, 1.0);
+                        v_tex_coords = tex_coords;
+                    }
+                ",
+
+                fragment: "
+                    #version 140
+                    uniform sampler2D tex;
+                    in vec2 v_tex_coords;
+                    out vec4 f_color;
+                    void main() {
+                        f_color = texture(tex, v_tex_coords);
+                    }
+                "
+            },
+
+            110 => {
+                vertex: "
+                    #version 110
+                    uniform mat4 matrix;
+                    attribute vec2 position;
+                    attribute vec2 tex_coords;
+                    varying vec2 v_tex_coords;
+                    void main() {
+                        gl_Position = matrix * vec4(position, 0.0, 1.0);
+                        v_tex_coords = tex_coords;
+                    }
+                ",
+
+                fragment: "
+                    #version 110
+                    uniform sampler2D tex;
+                    varying vec2 v_tex_coords;
+                    void main() {
+                        gl_FragColor = texture2D(tex, v_tex_coords);
+                    }
+                ",
+            },
+
+            100 => {
+                vertex: "
+                    #version 100
+                    uniform lowp mat4 matrix;
+                    attribute lowp vec2 position;
+                    attribute lowp vec2 tex_coords;
+                    varying lowp vec2 v_tex_coords;
+                    void main() {
+                        gl_Position = matrix * vec4(position, 0.0, 1.0);
+                        v_tex_coords = tex_coords;
+                    }
+                ",
+
+                fragment: "
+                    #version 100
+                    uniform lowp sampler2D tex;
+                    varying lowp vec2 v_tex_coords;
+                    void main() {
+                        gl_FragColor = texture2D(tex, v_tex_coords);
+                    }
+                    WINIT_UNIX_BACKEND=x11
+                ",
+            },
+        )
+        .unwrap();
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+            opengl_texture,
+            program,
+        }
+    }
+
+    fn draw_frame(&mut self, display: &Display<WindowSurface>, pixmap: &Pixmap) {
+        let mut frame = display.draw();
+
+        let width = pixmap.width() as u32;
+        let height = pixmap.height() as u32;
+        let pixels = pixmap.as_bytes();
+
+        // Dump new image to OpenGL texture
+        let raw_image = RawImage2d::from_raw_rgba_reversed(pixels, (width, height));
+        self.opengl_texture.write(
+            glium::Rect {
+                left: 0,
+                bottom: 0,
+                width,
+                height,
+            },
+            raw_image,
+        );
+
+        // Building the uniforms
+        let uniforms = uniform! {
+            matrix: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0f32]
+            ],
+            tex: &self.opengl_texture,
+        };
+
+        // Clearing the frame is not required since we always draw the image full screen
+        // frame.clear_color(0.0, 0.0, 0.0, 0.0);
+
+        frame
+            .draw(
+                &self.vertex_buffer,
+                &self.index_buffer,
+                &self.program,
+                &uniforms,
+                &Default::default(),
+            )
+            .unwrap();
+        frame.finish().unwrap();
+    }
+}

@@ -24,10 +24,16 @@ default = ["stats"]
 stats = []
 
 [dependencies]
+parking_lot = "0.12.0"
+draw_state = "0.8"
+
+glium = "0.36"
+glutin_new = { version = "0.32", package = "glutin" }
+glutin-winit = "0.5"
+winit = "0.30"
+
 gfx = "0.18"
 gfx_text = "0.33"
 gfx_device_gl = "0.16"
 glutin = "0.28"
-parking_lot = "0.12.0"
-draw_state = "0.8"
 old_school_gfx_glutin_ext = "0.28"
