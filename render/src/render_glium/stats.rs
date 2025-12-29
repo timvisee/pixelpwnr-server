@@ -1,6 +1,6 @@
 use glium::backend::{Context, Facade};
 use glium::Surface;
-use glium_glyph::glyph_brush::ab_glyph::FontRef;
+use glium_glyph::glyph_brush::ab_glyph::FontArc;
 use glium_glyph::glyph_brush::{GlyphCruncher, Section, Text};
 use glium_glyph::GlyphBrush;
 use ordered_float::OrderedFloat;
@@ -18,84 +18,20 @@ const TABLE_SPACING: (f32, f32) = (40.0, 10.0);
 const OFFSET: (f32, f32) = (40.0, 40.0);
 
 pub struct StatsRender {
-    /// Font file used for rendering
-    font: FontRef<'static>,
+    /// Glyph brush used for drawing text
+    glyph_brush: GlyphBrush<'static, FontArc>,
 
-    /// The rendering offset.
-    offset: (u32, u32),
-
-    /// The rendering padding.
-    padding: i32,
-
-    /// The column spacing amount.
-    col_spacing: i32,
-
-    /// The text to render.
+    /// Text buffer to render.
     text: Arc<Mutex<String>>,
 }
 
-// impl<F: Factory<R> + Clone> StatsRenderer<F> {
 impl StatsRender {
-    /// Construct a new stats renderer.
-    pub fn new(text: Arc<Mutex<String>>) -> Self {
-        let font = FontRef::try_from_slice(FONT_BYTES).unwrap();
+    /// Construct a new stats renderer
+    pub fn new<C: Facade + Deref<Target = Context>>(text: Arc<Mutex<String>>, facade: &C) -> Self {
+        let font = FontArc::try_from_slice(FONT_BYTES).unwrap();
+        let glyph_brush = GlyphBrush::new(facade, vec![font]);
 
-        StatsRender {
-            font,
-            offset: (0, 0),
-            padding: 0,
-            col_spacing: 0,
-            text,
-        }
-    }
-
-    /// Initialize the renderer.
-    #[allow(clippy::too_many_arguments)]
-    pub fn init(&mut self, offset: (u32, u32), padding: i32, col_spacing: i32) {
-        // Set the window dimensions, offset and padding
-        self.offset = offset;
-        self.padding = padding;
-        self.col_spacing = col_spacing;
-
-        // // Build the text renderer
-        // self.renderer = Some(
-        //     gfx_text::new(factory.clone())
-        //         .with_size(font_size)
-        //         .build()?,
-        // );
-
-        // // Create a shader pipeline for the stats background
-        // self.bg_pso = Some(
-        //     factory
-        //         .create_pipeline_simple(
-        //             include_bytes!(concat!(
-        //                 env!("CARGO_MANIFEST_DIR"),
-        //                 "/shaders/stats_bg.glslv"
-        //             )),
-        //             include_bytes!(concat!(
-        //                 env!("CARGO_MANIFEST_DIR"),
-        //                 "/shaders/stats_bg.glslf"
-        //             )),
-        //             bg_pipe::new(),
-        //         )
-        //         .unwrap(),
-        // );
-
-        // // Create a background plane
-        // let bg_plane = create_quad((-1f32, 0f32), (0.2f32, 0.95f32));
-        // let (vertex_buffer, slice) = bg_plane.create_vertex_buffer(&mut factory);
-
-        // // Store the slice, and build the background pipe data
-        // self.bg_slice = Some(slice);
-        // self.bg_data = Some(bg_pipe::Data {
-        //     vbuf: vertex_buffer,
-        //     out: main_color,
-        //     ref_values: (),
-        // });
-
-        // // Set the factory and depth stencil
-        // self.factory = Some(factory);
-        // self.bg_depth = Some(main_depth);
+        StatsRender { glyph_brush, text }
     }
 
     /// Get a reference to the text that is rendered.
@@ -111,11 +47,9 @@ impl StatsRender {
     /// Draw stats text to surface
     ///
     /// Method should be called once for each frame.
-    pub fn draw<C: Facade + Deref<Target = Context>, S: Surface>(
-        &self,
-        facade: &C,
-        surface: &mut S,
-    ) {
+    ///
+    /// Call `draw_queued` after to actually draw to a surface.
+    pub fn queue_draw(&mut self) {
         let text = self.text.lock().clone();
         if text.trim().is_empty() {
             return;
@@ -123,22 +57,14 @@ impl StatsRender {
 
         let cells = text.lines().map(|row| row.split('\t').collect()).collect();
 
-        self.draw_table(facade, surface, cells);
+        self.queue_draw_table(cells);
     }
 
-    /// Draw stats text to surface using table layout
-    pub fn draw_table<C: Facade + Deref<Target = Context>, S: Surface>(
-        &self,
-        facade: &C,
-        surface: &mut S,
-        cells: Vec<Vec<&str>>,
-    ) {
+    /// Queue drawing of stats text using table layout
+    fn queue_draw_table(&mut self, cells: Vec<Vec<&str>>) {
         if cells.is_empty() {
             return;
         }
-
-        // TODO: don't recreate this every frame?
-        let mut glyph_brush = GlyphBrush::new(facade, vec![&self.font]);
 
         let sections: Vec<Vec<_>> = cells
             .into_iter()
@@ -159,7 +85,7 @@ impl StatsRender {
             .iter()
             .map(|row| {
                 row.iter()
-                    .map(|cell| glyph_brush.glyph_bounds(cell).unwrap_or_default())
+                    .map(|cell| self.glyph_brush.glyph_bounds(cell).unwrap_or_default())
                     .collect()
             })
             .collect();
@@ -169,7 +95,8 @@ impl StatsRender {
         for (row, row_bounds) in sections.into_iter().zip(&bounds) {
             let mut x_offset = OFFSET.0;
             for (i, cell) in row.into_iter().enumerate() {
-                glyph_brush.queue(cell.with_screen_position((x_offset, y_offset)));
+                self.glyph_brush
+                    .queue(cell.with_screen_position((x_offset, y_offset)));
 
                 let cell_width = bounds
                     .iter()
@@ -189,7 +116,14 @@ impl StatsRender {
                 .0;
             y_offset += row_height + TABLE_SPACING.1;
         }
+    }
 
-        glyph_brush.draw_queued(facade, surface);
+    /// Draw queued to given surface
+    pub fn draw_queued<C: Facade + Deref<Target = Context>, S: Surface>(
+        &mut self,
+        facade: &C,
+        surface: &mut S,
+    ) {
+        self.glyph_brush.draw_queued(facade, surface);
     }
 }

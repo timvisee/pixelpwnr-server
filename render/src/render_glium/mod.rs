@@ -102,7 +102,7 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
                     state.context.update();
                     state
                         .context
-                        .draw_frame(&state.display, &state.pixmap, &state.stats);
+                        .draw_frame(&state.display, &state.pixmap, &mut state.stats);
                     state.fps.tick();
                     if self.close_requested {
                         event_loop.exit();
@@ -226,13 +226,14 @@ impl<T: ApplicationContext + 'static> State<T> {
         stats_text: StatsText,
     ) -> Self {
         let context = T::new(&display, &pixmap);
+        let stats = StatsRender::new(stats_text, &display);
         Self {
             display,
             window,
             context,
             pixmap,
             fps: FpsCounter::default(),
-            stats: StatsRender::new(stats_text),
+            stats,
         }
     }
 
@@ -258,7 +259,7 @@ pub trait ApplicationContext {
         &mut self,
         _display: &Display<WindowSurface>,
         _pixmap: &Pixmap,
-        _stats: &StatsRender,
+        _stats: &mut StatsRender,
     ) {
     }
     fn new(display: &Display<WindowSurface>, pixmap: &Pixmap) -> Self;
@@ -407,8 +408,10 @@ impl ApplicationContext for Application {
         &mut self,
         display: &Display<WindowSurface>,
         pixmap: &Pixmap,
-        stats: &StatsRender,
+        stats: &mut StatsRender,
     ) {
+        stats.queue_draw();
+
         let mut frame = display.draw();
 
         let width = pixmap.width() as u32;
@@ -465,7 +468,7 @@ impl ApplicationContext for Application {
             )
             .unwrap();
 
-        stats.draw(display, &mut frame);
+        stats.draw_queued(display, &mut frame);
 
         frame.finish().unwrap();
     }
