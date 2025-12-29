@@ -102,10 +102,14 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
                     state.stats.invalidate_background();
                 }
             }
-            glium::winit::event::WindowEvent::Focused(true)
-            | glium::winit::event::WindowEvent::ScaleFactorChanged { .. } => {
+            glium::winit::event::WindowEvent::Focused(true) => {
                 if let Some(state) = &mut self.state {
                     state.stats.invalidate_background();
+                }
+            }
+            glium::winit::event::WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if let Some(state) = &mut self.state {
+                    state.stats.set_scale_factor(scale_factor);
                 }
             }
             glium::winit::event::WindowEvent::RedrawRequested => {
@@ -239,7 +243,7 @@ impl<T: ApplicationContext + 'static> State<T> {
         stats_text: StatsText,
     ) -> Self {
         let context = T::new(&display, &pixmap);
-        let stats = StatsRender::new(stats_text, &display);
+        let stats = StatsRender::new(stats_text, &display, window.scale_factor());
         Self {
             display,
             window,

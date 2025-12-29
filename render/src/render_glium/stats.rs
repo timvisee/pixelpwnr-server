@@ -16,16 +16,19 @@ use crate::render_glium::Vertex;
 
 const FONT_BYTES: &[u8] = include_bytes!("../../fonts/DejaVuSans-2.37.ttf");
 
-const FONT_SCALE: f32 = 40.0;
+const FONT_SIZE: f32 = 20.0;
 
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-const TABLE_SPACING: (f32, f32) = (40.0, 10.0);
-const OFFSET: (f32, f32) = (40.0, 40.0);
+const TABLE_SPACING: (f32, f32) = (20.0, 5.0);
+const OFFSET: (f32, f32) = (20.0, 20.0);
 
 pub struct StatsRender {
     /// Glyph brush used for drawing text
     glyph_brush: GlyphBrush<'static, FontArc>,
+
+    /// Window scale factor (DPI)
+    scale_factor: f64,
 
     /// Text buffer to render
     text: Arc<Mutex<String>>,
@@ -43,7 +46,11 @@ pub struct StatsRender {
 
 impl StatsRender {
     /// Construct a new stats renderer
-    pub fn new<C: Facade + Deref<Target = Context>>(text: Arc<Mutex<String>>, facade: &C) -> Self {
+    pub fn new<C: Facade + Deref<Target = Context>>(
+        text: Arc<Mutex<String>>,
+        facade: &C,
+        scale_factor: f64,
+    ) -> Self {
         let font = FontArc::try_from_slice(FONT_BYTES).unwrap();
         let glyph_brush = GlyphBrush::new(facade, vec![font]);
 
@@ -150,6 +157,7 @@ impl StatsRender {
 
         StatsRender {
             glyph_brush,
+            scale_factor,
             text,
             last_text: String::new(),
             bg_vertex_buffer: None,
@@ -207,8 +215,8 @@ impl StatsRender {
                     .map(|cell| {
                         Section::default().add_text(
                             Text::new(cell)
-                                .with_scale(FONT_SCALE) // Font size
-                                .with_color(WHITE), // White
+                                .with_scale(FONT_SIZE * self.scale_factor as f32)
+                                .with_color(WHITE),
                         )
                     })
                     .collect()
@@ -228,9 +236,9 @@ impl StatsRender {
         let mut max_y = OrderedFloat(0.0);
 
         // Queue drawing for each section
-        let mut y_offset = OFFSET.1;
+        let mut y_offset = OFFSET.1 * self.scale_factor as f32;
         for (row, row_bounds) in sections.into_iter().zip(&bounds) {
-            let mut x_offset = OFFSET.0;
+            let mut x_offset = OFFSET.0 * self.scale_factor as f32;
             for (i, (cell, cell_bounds)) in row.into_iter().zip(row_bounds).enumerate() {
                 self.glyph_brush
                     .queue(cell.with_screen_position((x_offset, y_offset)));
@@ -245,7 +253,7 @@ impl StatsRender {
                     .max()
                     .unwrap_or_default()
                     .0;
-                x_offset += cell_width + TABLE_SPACING.0;
+                x_offset += cell_width + TABLE_SPACING.0 * self.scale_factor as f32;
             }
 
             let row_height = row_bounds
@@ -254,7 +262,7 @@ impl StatsRender {
                 .max()
                 .unwrap_or_default()
                 .0;
-            y_offset += row_height + TABLE_SPACING.1;
+            y_offset += row_height + TABLE_SPACING.1 * self.scale_factor as f32;
         }
 
         Some(Point {
@@ -289,8 +297,8 @@ impl StatsRender {
         if self.bg_vertex_buffer.is_none() {
             let w = bounds.x / dims.0 as f32 * 2f32;
             let h = bounds.y / dims.1 as f32 * 2f32;
-            let x = -1f32 + OFFSET.0 / dims.0 as f32;
-            let y = 1f32 - OFFSET.1 / dims.1 as f32 - h;
+            let x = -1f32 + (OFFSET.0 * self.scale_factor as f32) / dims.0 as f32;
+            let y = 1f32 - (OFFSET.1 * self.scale_factor as f32) / dims.1 as f32 - h;
             self.bg_vertex_buffer.replace(
                 glium::VertexBuffer::new(
                     facade,
@@ -326,6 +334,11 @@ impl StatsRender {
                 &self.bg_draw_params,
             )
             .unwrap();
+    }
+
+    pub fn set_scale_factor(&mut self, scale_factor: f64) {
+        self.scale_factor = scale_factor;
+        self.invalidate_background();
     }
 
     /// Invalidate background and recalculate positioning on next render
