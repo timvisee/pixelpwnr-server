@@ -16,7 +16,10 @@ use std::{
 };
 
 use clap::StructOpt;
-use pixelpwnr_render::{render_glium::State, Pixmap};
+use pixelpwnr_render::{
+    render_glium::{self, State},
+    Pixmap,
+};
 use tokio::net::{TcpListener, TcpStream};
 
 use codec::{CodecOptions, Lines};
@@ -205,8 +208,14 @@ fn render(
     );
     reporter.start();
 
-    State::<pixelpwnr_render::render_glium::Application>::run_loop(
+    let render_config = render_glium::Config {
+        fullscreen: arg_handler.fullscreen,
+        nearest_neighbor: arg_handler.nearest_neighbor,
+    };
+
+    State::<render_glium::Application>::run_loop(
         format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+        render_config,
         pixmap.clone(),
         reporter.screen.clone(),
         arg_handler.fullscreen,
