@@ -2,7 +2,7 @@ use glium::backend::{Context, Facade};
 use glium::draw_parameters::Blend;
 use glium::index::PrimitiveType;
 use glium::uniforms::{EmptyUniforms, UniformsStorage};
-use glium::{program, uniform, DrawParameters, Surface};
+use glium::{program, uniform, BlendingFunction, DrawParameters, LinearBlendingFactor, Surface};
 use glium_glyph::glyph_brush::ab_glyph::{FontArc, Point};
 use glium_glyph::glyph_brush::{GlyphCruncher, Section, Text};
 use glium_glyph::GlyphBrush;
@@ -70,14 +70,13 @@ impl StatsRender {
                         gl_Position = matrix * vec4(position, 0.0, 1.0);
                     }
                 ",
-
                 fragment: "
                     #version 140
                     out vec4 f_color;
                     void main() {
-                        f_color = vec4(0.0, 0.0, 0.0, 0.5);
+                        f_color = vec4(0.0, 0.0, 0.0, 0.75);
                     }
-                "
+                ",
             },
 
             110 => {
@@ -89,11 +88,10 @@ impl StatsRender {
                         gl_Position = matrix * vec4(position, 0.0, 1.0);
                     }
                 ",
-
                 fragment: "
                     #version 110
                     void main() {
-                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.5);
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.75);
                     }
                 ",
             },
@@ -107,11 +105,10 @@ impl StatsRender {
                         gl_Position = matrix * vec4(position, 0.0, 1.0);
                     }
                 ",
-
                 fragment: "
                     #version 100
                     void main() {
-                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.5);
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.75);
                     }
                     WINIT_UNIX_BACKEND=x11
                 ",
@@ -120,29 +117,17 @@ impl StatsRender {
         .unwrap();
 
         let bg_draw_params = DrawParameters {
-            blend: Blend::alpha_blending(),
-            // blend: Blend {
-            //     color: BlendingFunction::Addition {
-            //         source: LinearBlendingFactor::SourceAlpha,
-            //         destination: LinearBlendingFactor::OneMinusSourceAlpha,
-            //     },
-            //     alpha: BlendingFunction::Addition {
-            //         source: LinearBlendingFactor::SourceAlpha,
-            //         destination: LinearBlendingFactor::OneMinusSourceAlpha,
-            //     },
-            //     constant_value: (0.0, 0.0, 0.0, 0.0),
-            // },
-            // blend: Blend {
-            //     color: BlendingFunction::Addition {
-            //         source: LinearBlendingFactor::Zero,
-            //         destination: LinearBlendingFactor::Zero,
-            //     },
-            //     alpha: BlendingFunction::Addition {
-            //         source: LinearBlendingFactor::Zero,
-            //         destination: LinearBlendingFactor::Zero,
-            //     },
-            //     constant_value: (0.0, 0.0, 0.0, 0.0),
-            // },
+            blend: Blend {
+                color: BlendingFunction::Addition {
+                    source: LinearBlendingFactor::SourceAlpha,
+                    destination: LinearBlendingFactor::OneMinusSourceAlpha,
+                },
+                alpha: BlendingFunction::Addition {
+                    source: LinearBlendingFactor::One,
+                    destination: LinearBlendingFactor::OneMinusSourceAlpha,
+                },
+                constant_value: (0.0, 0.0, 0.0, 0.0),
+            },
             ..Default::default()
         };
 

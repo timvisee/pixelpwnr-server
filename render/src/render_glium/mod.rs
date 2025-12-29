@@ -351,7 +351,6 @@ impl ApplicationContext for Application {
                         v_tex_coords = tex_coords;
                     }
                 ",
-
                 fragment: "
                     #version 140
                     uniform sampler2D tex;
@@ -360,7 +359,7 @@ impl ApplicationContext for Application {
                     void main() {
                         f_color = texture(tex, v_tex_coords);
                     }
-                "
+                ",
             },
 
             110 => {
@@ -375,7 +374,6 @@ impl ApplicationContext for Application {
                         v_tex_coords = tex_coords;
                     }
                 ",
-
                 fragment: "
                     #version 110
                     uniform sampler2D tex;
@@ -398,7 +396,6 @@ impl ApplicationContext for Application {
                         v_tex_coords = tex_coords;
                     }
                 ",
-
                 fragment: "
                     #version 100
                     uniform lowp sampler2D tex;
