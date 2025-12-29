@@ -1,3 +1,4 @@
+#[cfg(feature = "stats")]
 pub mod stats;
 
 use std::num::NonZeroU32;
@@ -20,7 +21,11 @@ use winit::window::{WindowId, WindowLevel};
 
 use crate::fps_counter::FpsCounter;
 use crate::pixmap::Pixmap;
+#[cfg(feature = "stats")]
 use crate::render_glium::stats::StatsRender;
+
+#[cfg(not(feature = "stats"))]
+type StatsRender = ();
 
 /// Whether to clear to black each frame.
 const CLEAR_FRAME: bool = false;
@@ -99,14 +104,17 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
             glium::winit::event::WindowEvent::Resized(new_size) => {
                 if let Some(state) = &mut self.state {
                     state.display.resize(new_size.into());
+                    #[cfg(feature = "stats")]
                     state.stats.invalidate_background();
                 }
             }
+            #[cfg(feature = "stats")]
             glium::winit::event::WindowEvent::Focused(true) => {
                 if let Some(state) = &mut self.state {
                     state.stats.invalidate_background();
                 }
             }
+            #[cfg(feature = "stats")]
             glium::winit::event::WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 if let Some(state) = &mut self.state {
                     state.stats.set_scale_factor(scale_factor);
@@ -240,10 +248,15 @@ impl<T: ApplicationContext + 'static> State<T> {
         display: glium::Display<WindowSurface>,
         window: glium::winit::window::Window,
         pixmap: Arc<Pixmap>,
-        stats_text: StatsText,
+        #[cfg_attr(not(feature = "stats"), allow(unused))] stats_text: StatsText,
     ) -> Self {
         let context = T::new(&display, &pixmap);
+
+        #[cfg(feature = "stats")]
         let stats = StatsRender::new(stats_text, &display, window.scale_factor());
+        #[cfg(not(feature = "stats"))]
+        let stats = ();
+
         Self {
             display,
             window,
@@ -421,8 +434,9 @@ impl ApplicationContext for Application {
         &mut self,
         display: &Display<WindowSurface>,
         pixmap: &Pixmap,
-        stats: &mut StatsRender,
+        #[cfg_attr(not(feature = "stats"), allow(unused))] stats: &mut StatsRender,
     ) {
+        #[cfg(feature = "stats")]
         stats.queue_draw();
 
         let mut frame = display.draw();
@@ -481,6 +495,7 @@ impl ApplicationContext for Application {
             )
             .unwrap();
 
+        #[cfg(feature = "stats")]
         stats.draw_queued(display, &mut frame);
 
         frame.finish().unwrap();
