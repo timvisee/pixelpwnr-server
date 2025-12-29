@@ -12,16 +12,11 @@ use std::cmp::max;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use crate::render_glium::Vertex;
+use crate::render_glium::{Config, Vertex};
 
 const FONT_BYTES: &[u8] = include_bytes!("../../fonts/DejaVuSans-2.37.ttf");
 
-const FONT_SIZE: f32 = 20.0;
-
 const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-
-const TABLE_SPACING: (f32, f32) = (20.0, 5.0);
-const OFFSET: (f32, f32) = (20.0, 20.0);
 
 pub struct StatsRender {
     /// Glyph brush used for drawing text
@@ -170,7 +165,7 @@ impl StatsRender {
     /// Method should be called once for each frame.
     ///
     /// Call `draw_queued` after to actually draw to a surface.
-    pub fn queue_draw(&mut self) {
+    pub fn queue_draw(&mut self, config: &Config) {
         let text = self.text.lock().clone();
         if text != self.last_text {
             self.invalidate_background();
@@ -181,14 +176,14 @@ impl StatsRender {
 
         let cells = text.lines().map(|row| row.split('\t').collect()).collect();
 
-        let bg_bounds = self.queue_draw_table(cells);
+        let bg_bounds = self.queue_draw_table(config, cells);
         self.bg_last_size = bg_bounds;
 
         self.last_text = text;
     }
 
     /// Queue drawing of stats text using table layout
-    fn queue_draw_table(&mut self, cells: Vec<Vec<&str>>) -> Option<Point> {
+    fn queue_draw_table(&mut self, config: &Config, cells: Vec<Vec<&str>>) -> Option<Point> {
         if cells.is_empty() {
             return None;
         }
@@ -200,7 +195,7 @@ impl StatsRender {
                     .map(|cell| {
                         Section::default().add_text(
                             Text::new(cell)
-                                .with_scale(FONT_SIZE * self.scale_factor as f32)
+                                .with_scale(config.stats_font_size * self.scale_factor as f32)
                                 .with_color(WHITE),
                         )
                     })
@@ -221,9 +216,9 @@ impl StatsRender {
         let mut max_y = OrderedFloat(0.0);
 
         // Queue drawing for each section
-        let mut y_offset = OFFSET.1 * self.scale_factor as f32;
+        let mut y_offset = config.stats_offset.1 * self.scale_factor as f32;
         for (row, row_bounds) in sections.into_iter().zip(&bounds) {
-            let mut x_offset = OFFSET.0 * self.scale_factor as f32;
+            let mut x_offset = config.stats_offset.0 * self.scale_factor as f32;
             for (i, (cell, cell_bounds)) in row.into_iter().zip(row_bounds).enumerate() {
                 self.glyph_brush
                     .queue(cell.with_screen_position((x_offset, y_offset)));
@@ -238,7 +233,7 @@ impl StatsRender {
                     .max()
                     .unwrap_or_default()
                     .0;
-                x_offset += cell_width + TABLE_SPACING.0 * self.scale_factor as f32;
+                x_offset += cell_width + config.stats_spacing.0 * self.scale_factor as f32;
             }
 
             let row_height = row_bounds
@@ -247,7 +242,7 @@ impl StatsRender {
                 .max()
                 .unwrap_or_default()
                 .0;
-            y_offset += row_height + TABLE_SPACING.1 * self.scale_factor as f32;
+            y_offset += row_height + config.stats_spacing.1 * self.scale_factor as f32;
         }
 
         Some(Point {
@@ -259,16 +254,18 @@ impl StatsRender {
     /// Draw queued to given surface
     pub fn draw_queued<C: Facade + Deref<Target = Context>, S: Surface>(
         &mut self,
+        config: &Config,
         facade: &C,
         surface: &mut S,
     ) {
-        self.draw_background(facade, surface);
+        self.draw_background(config, facade, surface);
 
         self.glyph_brush.draw_queued(facade, surface);
     }
 
     fn draw_background<C: Facade + Deref<Target = Context>, S: Surface>(
         &mut self,
+        config: &Config,
         facade: &C,
         surface: &mut S,
     ) {
@@ -282,8 +279,8 @@ impl StatsRender {
         if self.bg_vertex_buffer.is_none() {
             let w = bounds.x / dims.0 as f32 * 2f32;
             let h = bounds.y / dims.1 as f32 * 2f32;
-            let x = -1f32 + (OFFSET.0 * self.scale_factor as f32) / dims.0 as f32;
-            let y = 1f32 - (OFFSET.1 * self.scale_factor as f32) / dims.1 as f32 - h;
+            let x = -1f32 + (config.stats_offset.0 * self.scale_factor as f32) / dims.0 as f32;
+            let y = 1f32 - (config.stats_offset.1 * self.scale_factor as f32) / dims.1 as f32 - h;
             self.bg_vertex_buffer.replace(
                 glium::VertexBuffer::new(
                     facade,

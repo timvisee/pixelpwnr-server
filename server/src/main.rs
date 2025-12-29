@@ -211,6 +211,10 @@ fn render(
     let render_config = render_glium::Config {
         fullscreen: arg_handler.fullscreen,
         nearest_neighbor: arg_handler.nearest_neighbor,
+        stats_font_size: arg_handler.stats_font_size,
+        stats_offset: arg_handler.stats_offset(),
+        stats_spacing: arg_handler.stats_spacing(),
+        stats_padding: arg_handler.stats_padding,
     };
 
     State::<render_glium::Application>::run_loop(
@@ -218,6 +222,5 @@ fn render(
         render_config,
         pixmap.clone(),
         reporter.screen.clone(),
-        arg_handler.fullscreen,
     );
 }

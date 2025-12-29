@@ -65,23 +65,28 @@ pub struct Opts {
 
     /// Screen stats font size in pixels
     #[clap(long, value_name = "PX", default_value = "20", alias = "font-size")]
-    pub stats_font_size: u8,
+    pub stats_font_size: f32,
+
+    /// Screen stats offset
+    #[clap(long, value_name = "XxY", default_value = "20x20", alias = "offset")]
+    stats_offset: String,
+
+    /// Screen stats column spacing
+    #[clap(
+        long,
+        alias = "stats-column-spacing",
+        alias = "stats-col-spacing",
+        default_value = "20x5"
+    )]
+    stats_spacing: String,
 
     /// Screen stats padding
     #[clap(long, value_name = "PX", default_value = "12", alias = "padding")]
-    pub stats_padding: i32,
-
-    /// Screen stats offset
-    #[clap(long, value_name = "XxY", default_value = "10x10", alias = "offset")]
-    stats_offset: String,
+    pub stats_padding: f32,
 
     /// Custom host to connect to in stats [default: host]
     #[clap(long, value_name = "DISPLAY_HOST")]
     pub stats_host: Option<SocketAddr>,
-
-    /// Screen stats column spacing
-    #[clap(long, alias = "stats-column-spacing", default_value = "20")]
-    pub stats_col_spacing: i32,
 
     /// The directory under which to save images.
     #[clap(long, short)]
@@ -133,26 +138,53 @@ impl Opts {
     }
 
     /// Get the stats screen offset
-    pub fn stats_offset(&self) -> (u32, u32) {
+    pub fn stats_offset(&self) -> (f32, f32) {
         let lower_case = self.stats_offset.to_lowercase();
-        let mut parts = lower_case.split("x");
+        let parts = lower_case.split("x");
+        let count = parts.clone().count();
 
-        if parts.clone().count() != 2 {
-            panic!("Invalid stats offset");
+        let mut parts = parts
+            .map(|n| n.parse::<f32>().expect("valid number"))
+            .inspect(|n| {
+                if *n < 0.0 || !n.is_finite() {
+                    panic!("stats offset must be a positive number");
+                }
+            });
+
+        if count == 1 {
+            let n = parts.next().unwrap();
+            return (n, n);
+        }
+        if count == 2 {
+            return (parts.next().unwrap(), parts.next().unwrap());
         }
 
-        (
-            parts
-                .next()
-                .unwrap()
-                .parse()
-                .expect("Invalid X offset for stats"),
-            parts
-                .next()
-                .unwrap()
-                .parse()
-                .expect("Invalid Y offset for stats"),
-        )
+        panic!("Invalid stats offset");
+    }
+
+    /// Get the stats screen spacing
+    pub fn stats_spacing(&self) -> (f32, f32) {
+        let lower_case = self.stats_spacing.to_lowercase();
+        let parts = lower_case.split("x");
+        let count = parts.clone().count();
+
+        let mut parts = parts
+            .map(|n| n.parse::<f32>().expect("valid number"))
+            .inspect(|n| {
+                if *n < 0.0 || !n.is_finite() {
+                    panic!("stats spacing must be a positive number");
+                }
+            });
+
+        if count == 1 {
+            let n = parts.next().unwrap();
+            return (n, n);
+        }
+        if count == 2 {
+            return (parts.next().unwrap(), parts.next().unwrap());
+        }
+
+        panic!("Invalid stats spacing");
     }
 }
 

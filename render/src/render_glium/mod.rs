@@ -64,6 +64,14 @@ pub struct Config {
     pub fullscreen: bool,
     /// Whether to use nearest neighbor image scaling
     pub nearest_neighbor: bool,
+    #[cfg(feature = "stats")]
+    pub stats_font_size: f32,
+    #[cfg(feature = "stats")]
+    pub stats_offset: (f32, f32),
+    #[cfg(feature = "stats")]
+    pub stats_spacing: (f32, f32),
+    #[cfg(feature = "stats")]
+    pub stats_padding: f32,
 }
 
 /// Based upon <https://github.com/glium/glium/blob/master/examples/image.rs>
@@ -285,13 +293,7 @@ impl<T: ApplicationContext + 'static> State<T> {
     }
 
     /// Start the event_loop and keep rendering frames until the program is closed
-    pub fn run_loop(
-        title: String,
-        config: Config,
-        pixmap: Arc<Pixmap>,
-        stats_text: StatsText,
-        fullscreen: bool,
-    ) {
+    pub fn run_loop(title: String, config: Config, pixmap: Arc<Pixmap>, stats_text: StatsText) {
         let event_loop = glium::winit::event_loop::EventLoop::builder()
             .build()
             .expect("glium event loop building");
@@ -462,7 +464,7 @@ impl ApplicationContext for Application {
         #[cfg_attr(not(feature = "stats"), allow(unused))] stats: &mut StatsRender,
     ) {
         #[cfg(feature = "stats")]
-        stats.queue_draw();
+        stats.queue_draw(config);
 
         let mut frame = display.draw();
 
@@ -528,7 +530,7 @@ impl ApplicationContext for Application {
             .unwrap();
 
         #[cfg(feature = "stats")]
-        stats.draw_queued(display, &mut frame);
+        stats.draw_queued(config, display, &mut frame);
 
         frame.finish().unwrap();
     }
