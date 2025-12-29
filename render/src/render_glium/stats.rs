@@ -74,7 +74,7 @@ impl StatsRender {
                     #version 140
                     out vec4 f_color;
                     void main() {
-                        f_color = vec4(0.0, 0.0, 0.0, 0.75);
+                        f_color = vec4(0.0, 0.0, 0.0, 0.5);
                     }
                 ",
             },
@@ -91,7 +91,7 @@ impl StatsRender {
                 fragment: "
                     #version 110
                     void main() {
-                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.75);
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.5);
                     }
                 ",
             },
@@ -108,7 +108,7 @@ impl StatsRender {
                 fragment: "
                     #version 100
                     void main() {
-                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.75);
+                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.5);
                     }
                     WINIT_UNIX_BACKEND=x11
                 ",
