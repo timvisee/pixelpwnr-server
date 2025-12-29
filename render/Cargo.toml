@@ -24,12 +24,11 @@ default = ["stats"]
 stats = []
 
 [dependencies]
+ordered-float = "5.1"
 parking_lot = "0.12.0"
-draw_state = "0.8"
 
 glium = "0.36"
 glium-glyph = { version = "*", git = "https://github.com/est31/glium-glyph.git", rev = "f5e0413" }
 glutin = "0.32"
 glutin-winit = "0.5"
 winit = "0.30"
-ordered-float = "5.1"
