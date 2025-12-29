@@ -10,12 +10,11 @@ use std::sync::Arc;
 
 const FONT_BYTES: &[u8] = include_bytes!("../../fonts/DejaVuSans-2.37.ttf");
 
-/// White color definition with 4 channels.
-const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-
 const FONT_SCALE: f32 = 40.0;
 
-const COL_SPACING: f32 = 40.0;
+const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+
+const TABLE_SPACING: (f32, f32) = (40.0, 10.0);
 const OFFSET: (f32, f32) = (40.0, 40.0);
 
 pub struct StatsRender {
@@ -179,7 +178,7 @@ impl StatsRender {
                     .max()
                     .unwrap_or_default()
                     .0;
-                x_offset += cell_width + COL_SPACING;
+                x_offset += cell_width + TABLE_SPACING.0;
             }
 
             let row_height = row_bounds
@@ -188,7 +187,7 @@ impl StatsRender {
                 .max()
                 .unwrap_or_default()
                 .0;
-            y_offset += row_height;
+            y_offset += row_height + TABLE_SPACING.1;
         }
 
         glyph_brush.draw_queued(facade, surface);
