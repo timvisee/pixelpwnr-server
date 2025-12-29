@@ -58,6 +58,7 @@ struct App<T> {
     state: Option<State<T>>,
     visible: bool,
     close_requested: bool,
+    title: String,
     pixmap: Arc<Pixmap>,
     stats_text: StatsText,
 }
@@ -70,6 +71,7 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
         self.state = Some(State::new(
             event_loop,
             self.visible,
+            &self.title,
             self.pixmap.clone(),
             self.stats_text.clone(),
         ));
@@ -142,11 +144,12 @@ impl<T: ApplicationContext + 'static> State<T> {
     pub fn new(
         event_loop: &glium::winit::event_loop::ActiveEventLoop,
         visible: bool,
+        title: &str,
         pixmap: Arc<Pixmap>,
         stats_text: StatsText,
     ) -> Self {
         let window_attributes = winit::window::Window::default_attributes()
-            .with_title(T::WINDOW_TITLE)
+            .with_title(title)
             .with_active(true)
             .with_window_level(WindowLevel::AlwaysOnTop)
             // Full screen on current monitor
@@ -238,7 +241,7 @@ impl<T: ApplicationContext + 'static> State<T> {
     }
 
     /// Start the event_loop and keep rendering frames until the program is closed
-    pub fn run_loop(pixmap: Arc<Pixmap>, stats_text: StatsText) {
+    pub fn run_loop(title: String, pixmap: Arc<Pixmap>, stats_text: StatsText) {
         let event_loop = glium::winit::event_loop::EventLoop::builder()
             .build()
             .expect("glium event loop building");
@@ -246,6 +249,7 @@ impl<T: ApplicationContext + 'static> State<T> {
             state: None,
             visible: true,
             close_requested: false,
+            title,
             pixmap,
             stats_text,
         };
@@ -270,12 +274,9 @@ pub trait ApplicationContext {
         _window: &glium::winit::window::Window,
     ) {
     }
-    const WINDOW_TITLE: &'static str;
 }
 
 impl ApplicationContext for Application {
-    const WINDOW_TITLE: &'static str = env!("CARGO_PKG_NAME");
-
     fn new(display: &Display<WindowSurface>, pixmap: &Pixmap) -> Self {
         let width = pixmap.width() as u32;
         let height = pixmap.height() as u32;

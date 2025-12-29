@@ -206,6 +206,7 @@ fn render(
     reporter.start();
 
     State::<pixelpwnr_render::render_glium::Application>::run_loop(
+        format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
         pixmap.clone(),
         reporter.screen.clone(),
     );
