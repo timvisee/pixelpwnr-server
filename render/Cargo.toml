@@ -32,3 +32,4 @@ glium-glyph = { version = "*", path = "/home/timvisee/tmp/glium-glyph" }
 glutin = "0.32"
 glutin-winit = "0.5"
 winit = "0.30"
+ordered-float = "5.1"

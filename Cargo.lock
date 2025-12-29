@@ -1477,6 +1477,7 @@ dependencies = [
  "glium-glyph",
  "glutin",
  "glutin-winit",
+ "ordered-float",
  "parking_lot",
  "winit",
 ]
