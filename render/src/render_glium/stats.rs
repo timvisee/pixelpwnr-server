@@ -33,9 +33,6 @@ pub struct StatsRender {
 
     /// The text to render.
     text: Arc<Mutex<String>>,
-
-    /// The dimensions the rendering window has, used for text placement.
-    window_dimensions: Option<(f32, f32)>,
 }
 
 // impl<F: Factory<R> + Clone> StatsRenderer<F> {
@@ -50,21 +47,13 @@ impl StatsRender {
             padding: 0,
             col_spacing: 0,
             text,
-            window_dimensions: None,
         }
     }
 
     /// Initialize the renderer.
     #[allow(clippy::too_many_arguments)]
-    pub fn init(
-        &mut self,
-        window_dimensions: (f32, f32),
-        offset: (u32, u32),
-        padding: i32,
-        col_spacing: i32,
-    ) {
+    pub fn init(&mut self, offset: (u32, u32), padding: i32, col_spacing: i32) {
         // Set the window dimensions, offset and padding
-        self.window_dimensions = Some(window_dimensions);
         self.offset = offset;
         self.padding = padding;
         self.col_spacing = col_spacing;
@@ -203,22 +192,5 @@ impl StatsRender {
         }
 
         glyph_brush.draw_queued(facade, surface);
-    }
-
-    /// Update the stats rendering view, and the window dimensions.
-    /// This should be called when the GL rendering window is resized.
-    // TODO: also update the text view here
-    pub fn update_views(
-        &mut self,
-        // window: &WindowedContext<PossiblyCurrent>,
-        dimensions: (f32, f32),
-    ) {
-        // // Update the views
-        // if let Some(data) = self.bg_data.as_mut() {
-        //     window.update_gfx(&mut data.out, self.bg_depth.as_mut().unwrap());
-        // }
-
-        // Update the window dimensions
-        self.window_dimensions = Some(dimensions);
     }
 }
