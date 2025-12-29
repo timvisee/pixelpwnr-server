@@ -95,8 +95,15 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
     ) {
         match event {
             glium::winit::event::WindowEvent::Resized(new_size) => {
-                if let Some(state) = &self.state {
+                if let Some(state) = &mut self.state {
                     state.display.resize(new_size.into());
+                    state.stats.invalidate_background();
+                }
+            }
+            glium::winit::event::WindowEvent::Focused(true)
+            | glium::winit::event::WindowEvent::ScaleFactorChanged { .. } => {
+                if let Some(state) = &mut self.state {
+                    state.stats.invalidate_background();
                 }
             }
             glium::winit::event::WindowEvent::RedrawRequested => {
