@@ -57,6 +57,7 @@ pub struct State<T> {
 struct App<T> {
     state: Option<State<T>>,
     visible: bool,
+    fullscreen: bool,
     close_requested: bool,
     title: String,
     pixmap: Arc<Pixmap>,
@@ -71,6 +72,7 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
         self.state = Some(State::new(
             event_loop,
             self.visible,
+            self.fullscreen,
             &self.title,
             self.pixmap.clone(),
             self.stats_text.clone(),
@@ -151,6 +153,7 @@ impl<T: ApplicationContext + 'static> State<T> {
     pub fn new(
         event_loop: &glium::winit::event_loop::ActiveEventLoop,
         visible: bool,
+        fullscreen: bool,
         title: &str,
         pixmap: Arc<Pixmap>,
         stats_text: StatsText,
@@ -160,7 +163,7 @@ impl<T: ApplicationContext + 'static> State<T> {
             .with_active(true)
             .with_window_level(WindowLevel::AlwaysOnTop)
             // Full screen on current monitor
-            //.with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+            .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
             // Base window size on pixmap
             .with_inner_size(LogicalSize::new(
                 pixmap.width() as u32,
@@ -248,13 +251,14 @@ impl<T: ApplicationContext + 'static> State<T> {
     }
 
     /// Start the event_loop and keep rendering frames until the program is closed
-    pub fn run_loop(title: String, pixmap: Arc<Pixmap>, stats_text: StatsText) {
+    pub fn run_loop(title: String, pixmap: Arc<Pixmap>, stats_text: StatsText, fullscreen: bool) {
         let event_loop = glium::winit::event_loop::EventLoop::builder()
             .build()
             .expect("glium event loop building");
         let mut app = App::<T> {
             state: None,
             visible: true,
+            fullscreen,
             close_requested: false,
             title,
             pixmap,

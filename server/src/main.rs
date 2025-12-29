@@ -209,5 +209,6 @@ fn render(
         format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
         pixmap.clone(),
         reporter.screen.clone(),
+        arg_handler.fullscreen,
     );
 }
