@@ -705,6 +705,7 @@ dependencies = [
 [[package]]
 name = "glium-glyph"
 version = "0.14.0"
+source = "git+https://github.com/timvisee/glium-glyph.git?rev=5d80980#5d8098085ee50bce7a8c972976c91f6933a9e18d"
 dependencies = [
  "glium",
  "glyph_brush",

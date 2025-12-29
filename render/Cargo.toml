@@ -28,7 +28,7 @@ parking_lot = "0.12.0"
 draw_state = "0.8"
 
 glium = "0.36"
-glium-glyph = { version = "*", path = "/home/timvisee/tmp/glium-glyph" }
+glium-glyph = { version = "*", git = "https://github.com/timvisee/glium-glyph.git", rev = "5d80980" }
 glutin = "0.32"
 glutin-winit = "0.5"
 winit = "0.30"
