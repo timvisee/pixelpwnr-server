@@ -68,7 +68,7 @@ pub struct Opts {
     pub stats_font_size: f32,
 
     /// Screen stats offset
-    #[clap(long, value_name = "XxY", default_value = "20x20", alias = "offset")]
+    #[clap(long, value_name = "XxY", default_value = "10x10", alias = "offset")]
     stats_offset: String,
 
     /// Screen stats column spacing
@@ -77,12 +77,12 @@ pub struct Opts {
         value_name = "XxY",
         alias = "stats-column-spacing",
         alias = "stats-col-spacing",
-        default_value = "40x10"
+        default_value = "20x5"
     )]
     stats_spacing: String,
 
     /// Screen stats padding
-    #[clap(long, value_name = "XxY", default_value = "20x20", alias = "padding")]
+    #[clap(long, value_name = "XxY", default_value = "10x10", alias = "padding")]
     stats_padding: String,
 
     /// Custom host to connect to in stats [default: host]

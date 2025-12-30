@@ -134,7 +134,7 @@ impl<T: ApplicationContext + 'static> ApplicationHandler<()> for App<T> {
             #[cfg(feature = "stats")]
             glium::winit::event::WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 if let Some(state) = &mut self.state {
-                    state.stats.set_scale_factor(scale_factor);
+                    state.stats.set_scale_factor(scale_factor as f32);
                 }
             }
             glium::winit::event::WindowEvent::RedrawRequested => {
@@ -278,7 +278,7 @@ impl<T: ApplicationContext + 'static> State<T> {
         let context = T::new(&display, &pixmap);
 
         #[cfg(feature = "stats")]
-        let stats = StatsRender::new(stats_text, &display, window.scale_factor());
+        let stats = StatsRender::new(stats_text, &display, window.scale_factor() as f32);
         #[cfg(not(feature = "stats"))]
         let stats = ();
 

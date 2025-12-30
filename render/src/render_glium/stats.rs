@@ -23,7 +23,7 @@ pub struct StatsRender {
     glyph_brush: GlyphBrush<'static, FontArc>,
 
     /// Window scale factor (DPI)
-    scale_factor: f64,
+    scale_factor: f32,
 
     /// Text buffer to render
     text: Arc<Mutex<String>>,
@@ -44,7 +44,7 @@ impl StatsRender {
     pub fn new<C: Facade + Deref<Target = Context>>(
         text: Arc<Mutex<String>>,
         facade: &C,
-        scale_factor: f64,
+        scale_factor: f32,
     ) -> Self {
         let font = FontArc::try_from_slice(FONT_BYTES).unwrap();
         let glyph_brush = GlyphBrush::new(facade, vec![font]);
@@ -195,7 +195,7 @@ impl StatsRender {
                     .map(|cell| {
                         Section::default().add_text(
                             Text::new(cell)
-                                .with_scale(config.stats_font_size_px * self.scale_factor as f32)
+                                .with_scale(config.stats_font_size_px * self.scale_factor)
                                 .with_color(WHITE),
                         )
                     })
@@ -212,21 +212,23 @@ impl StatsRender {
             })
             .collect();
 
-        let x_offset_base = config.stats_offset_px.0 + config.stats_padding_px.0;
-        let y_offset_base = config.stats_offset_px.1 + config.stats_padding_px.1;
+        let x_offset_text =
+            (config.stats_offset_px.0 + config.stats_padding_px.0) * self.scale_factor;
+        let y_offset_text =
+            (config.stats_offset_px.1 + config.stats_padding_px.1) * self.scale_factor;
 
         let rect_min = Point {
-            x: config.stats_offset_px.0 * self.scale_factor as f32,
-            y: config.stats_offset_px.1 * self.scale_factor as f32,
+            x: config.stats_offset_px.0 * self.scale_factor,
+            y: config.stats_offset_px.1 * self.scale_factor,
         };
 
         let mut max_x = OrderedFloat(0.0);
         let mut max_y = OrderedFloat(0.0);
 
         // Queue drawing for each section
-        let mut y_offset = y_offset_base;
+        let mut y_offset = y_offset_text;
         for (row, row_bounds) in sections.into_iter().zip(&bounds) {
-            let mut x_offset = x_offset_base;
+            let mut x_offset = x_offset_text;
             for (i, (cell, cell_bounds)) in row.into_iter().zip(row_bounds).enumerate() {
                 self.glyph_brush
                     .queue(cell.with_screen_position((x_offset, y_offset)));
@@ -241,7 +243,7 @@ impl StatsRender {
                     .max()
                     .unwrap_or_default()
                     .0;
-                x_offset += cell_width + config.stats_spacing_px.0;
+                x_offset += cell_width + config.stats_spacing_px.0 * self.scale_factor;
             }
 
             let row_height = row_bounds
@@ -250,12 +252,12 @@ impl StatsRender {
                 .max()
                 .unwrap_or_default()
                 .0;
-            y_offset += row_height + config.stats_spacing_px.1;
+            y_offset += row_height + config.stats_spacing_px.1 * self.scale_factor;
         }
 
         let rect_max = Point {
-            x: (max_x.0 + config.stats_padding_px.0) * self.scale_factor as f32,
-            y: (max_y.0 + config.stats_padding_px.1) * self.scale_factor as f32,
+            x: max_x.0 + config.stats_padding_px.0 * self.scale_factor,
+            y: max_y.0 + config.stats_padding_px.1 * self.scale_factor,
         };
 
         Some(Rect {
@@ -290,11 +292,10 @@ impl StatsRender {
 
         // Calculate background vertex buffer if not set
         if self.bg_vertex_buffer.is_none() {
-            let w = rect.width() / dims.0 as f32;
-            let h = rect.height() / dims.1 as f32;
-            let x = -1f32 + (config.stats_offset_px.0 * self.scale_factor as f32) / dims.0 as f32;
-            let y =
-                1f32 - (config.stats_offset_px.1 * self.scale_factor as f32) / dims.1 as f32 - h;
+            let w = rect.width() / dims.0 as f32 * 2.0;
+            let h = rect.height() / dims.1 as f32 * 2.0;
+            let x = -1f32 + (config.stats_offset_px.0 * self.scale_factor * 2.0) / dims.0 as f32;
+            let y = 1f32 - (config.stats_offset_px.1 * self.scale_factor * 2.0) / dims.1 as f32 - h;
 
             self.bg_vertex_buffer.replace(
                 glium::VertexBuffer::new(
@@ -333,7 +334,7 @@ impl StatsRender {
             .unwrap();
     }
 
-    pub fn set_scale_factor(&mut self, scale_factor: f64) {
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.scale_factor = scale_factor;
         self.invalidate_background();
     }
