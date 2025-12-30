@@ -76,12 +76,12 @@ pub struct Opts {
         long,
         alias = "stats-column-spacing",
         alias = "stats-col-spacing",
-        default_value = "20x5"
+        default_value = "40x10"
     )]
     stats_spacing: String,
 
     /// Screen stats padding
-    #[clap(long, value_name = "PX", default_value = "12", alias = "padding")]
+    #[clap(long, value_name = "PX", default_value = "20", alias = "padding")]
     pub stats_padding: f32,
 
     /// Custom host to connect to in stats [default: host]

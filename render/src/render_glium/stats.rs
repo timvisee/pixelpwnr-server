@@ -3,7 +3,7 @@ use glium::draw_parameters::Blend;
 use glium::index::PrimitiveType;
 use glium::uniforms::{EmptyUniforms, UniformsStorage};
 use glium::{program, uniform, BlendingFunction, DrawParameters, LinearBlendingFactor, Surface};
-use glium_glyph::glyph_brush::ab_glyph::{FontArc, Point};
+use glium_glyph::glyph_brush::ab_glyph::{FontArc, Point, Rect};
 use glium_glyph::glyph_brush::{GlyphCruncher, Section, Text};
 use glium_glyph::GlyphBrush;
 use ordered_float::OrderedFloat;
@@ -36,7 +36,7 @@ pub struct StatsRender {
     bg_program: glium::Program,
     bg_draw_params: DrawParameters<'static>,
     bg_uniforms: UniformsStorage<'static, [[f32; 4]; 4], EmptyUniforms>,
-    bg_last_size: Option<Point>,
+    bg_last_rect: Option<Rect>,
 }
 
 impl StatsRender {
@@ -145,7 +145,7 @@ impl StatsRender {
             bg_program,
             bg_draw_params,
             bg_uniforms,
-            bg_last_size: None,
+            bg_last_rect: None,
         }
     }
 
@@ -177,13 +177,13 @@ impl StatsRender {
         let cells = text.lines().map(|row| row.split('\t').collect()).collect();
 
         let bg_bounds = self.queue_draw_table(config, cells);
-        self.bg_last_size = bg_bounds;
+        self.bg_last_rect = bg_bounds;
 
         self.last_text = text;
     }
 
     /// Queue drawing of stats text using table layout
-    fn queue_draw_table(&mut self, config: &Config, cells: Vec<Vec<&str>>) -> Option<Point> {
+    fn queue_draw_table(&mut self, config: &Config, cells: Vec<Vec<&str>>) -> Option<Rect> {
         if cells.is_empty() {
             return None;
         }
@@ -195,7 +195,7 @@ impl StatsRender {
                     .map(|cell| {
                         Section::default().add_text(
                             Text::new(cell)
-                                .with_scale(config.stats_font_size * self.scale_factor as f32)
+                                .with_scale(config.stats_font_size_px * self.scale_factor as f32)
                                 .with_color(WHITE),
                         )
                     })
@@ -212,13 +212,23 @@ impl StatsRender {
             })
             .collect();
 
+        let x_padding = config.stats_padding_px;
+        let y_padding = config.stats_padding_px;
+        let x_offset_base = config.stats_offset_px.0 + x_padding;
+        let y_offset_base = config.stats_offset_px.1 + y_padding;
+
+        let rect_min = Point {
+            x: config.stats_offset_px.0 * self.scale_factor as f32,
+            y: config.stats_offset_px.1 * self.scale_factor as f32,
+        };
+
         let mut max_x = OrderedFloat(0.0);
         let mut max_y = OrderedFloat(0.0);
 
         // Queue drawing for each section
-        let mut y_offset = config.stats_offset.1 * self.scale_factor as f32;
+        let mut y_offset = y_offset_base;
         for (row, row_bounds) in sections.into_iter().zip(&bounds) {
-            let mut x_offset = config.stats_offset.0 * self.scale_factor as f32;
+            let mut x_offset = x_offset_base;
             for (i, (cell, cell_bounds)) in row.into_iter().zip(row_bounds).enumerate() {
                 self.glyph_brush
                     .queue(cell.with_screen_position((x_offset, y_offset)));
@@ -233,7 +243,7 @@ impl StatsRender {
                     .max()
                     .unwrap_or_default()
                     .0;
-                x_offset += cell_width + config.stats_spacing.0 * self.scale_factor as f32;
+                x_offset += cell_width + config.stats_spacing_px.0;
             }
 
             let row_height = row_bounds
@@ -242,12 +252,17 @@ impl StatsRender {
                 .max()
                 .unwrap_or_default()
                 .0;
-            y_offset += row_height + config.stats_spacing.1 * self.scale_factor as f32;
+            y_offset += row_height + config.stats_spacing_px.1;
         }
 
-        Some(Point {
-            x: max_x.0,
-            y: max_y.0,
+        let rect_max = Point {
+            x: (max_x.0 + x_padding) * self.scale_factor as f32,
+            y: (max_y.0 + y_padding) * self.scale_factor as f32,
+        };
+
+        Some(Rect {
+            min: rect_min,
+            max: rect_max,
         })
     }
 
@@ -271,17 +286,18 @@ impl StatsRender {
     ) {
         let dims = surface.get_dimensions();
 
-        let Some(bounds) = self.bg_last_size else {
+        let Some(rect) = self.bg_last_rect else {
             return;
         };
 
         // Calculate background vertex buffer if not set
         if self.bg_vertex_buffer.is_none() {
-            // TODO: fix offset and padding handling
-            let w = bounds.x / dims.0 as f32 * 2f32;
-            let h = bounds.y / dims.1 as f32 * 2f32;
-            let x = -1f32 + (config.stats_offset.0 * self.scale_factor as f32) / dims.0 as f32;
-            let y = 1f32 - (config.stats_offset.1 * self.scale_factor as f32) / dims.1 as f32 - h;
+            let w = rect.width() / dims.0 as f32;
+            let h = rect.height() / dims.1 as f32;
+            let x = -1f32 + (config.stats_offset_px.0 * self.scale_factor as f32) / dims.0 as f32;
+            let y =
+                1f32 - (config.stats_offset_px.1 * self.scale_factor as f32) / dims.1 as f32 - h;
+
             self.bg_vertex_buffer.replace(
                 glium::VertexBuffer::new(
                     facade,

@@ -66,13 +66,13 @@ pub struct Config {
     /// Whether to use nearest neighbor image scaling
     pub nearest_neighbor: bool,
     #[cfg(feature = "stats")]
-    pub stats_font_size: f32,
+    pub stats_font_size_px: f32,
     #[cfg(feature = "stats")]
-    pub stats_offset: (f32, f32),
+    pub stats_offset_px: (f32, f32),
     #[cfg(feature = "stats")]
-    pub stats_spacing: (f32, f32),
+    pub stats_spacing_px: (f32, f32),
     #[cfg(feature = "stats")]
-    pub stats_padding: f32,
+    pub stats_padding_px: f32,
 }
 
 /// Based upon <https://github.com/glium/glium/blob/master/examples/image.rs>
