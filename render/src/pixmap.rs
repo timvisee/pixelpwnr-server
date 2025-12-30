@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::color::Color;
 
 /// Whether to flip the Y axis, useful for GPU rendering
-const FLIP_Y: bool = false;
+const FLIP_Y: bool = true;
 
 /// A struct representing a pixelmap for pixelflut.
 ///
@@ -150,8 +150,27 @@ impl Pixmap {
         // Because we are borrowing `self` for 'me (by means of a mutable borrow),
         // we can safely create an immutable slice of the memory that we're
         // pointing to that for 'me.
-        let slice = unsafe { core::slice::from_raw_parts(ptr, len) };
-        slice
+        unsafe { core::slice::from_raw_parts(ptr, len) }
+    }
+
+    /// Get the pixelmap data, as a slice of (u8, u8, u8, u8).
+    ///
+    /// Each pixel consumes a sequence of 4 bytes, each defining the value of
+    /// a different color channel.
+    ///
+    /// This data may be used to send to the GPU, as raw texture buffer, for
+    /// rendering.
+    pub fn as_u8u8u8u8(&self) -> &[(u8, u8, u8, u8)] {
+        let map = &self.map;
+
+        // We get a pointer to the start of the U32 list
+        //
+        // Casting *const AtomicU32 to *const u32 is OK because Atomicu32
+        // has the same in-memory representation as u32
+        let ptr = map.as_ptr() as *const u32 as *const (u8, u8, u8, u8);
+
+        // We create the slice from the pointer
+        unsafe { core::slice::from_raw_parts(ptr, map.len()) }
     }
 }
 

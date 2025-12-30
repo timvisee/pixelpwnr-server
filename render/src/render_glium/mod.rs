@@ -5,7 +5,8 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use glium::index::PrimitiveType;
-use glium::texture::RawImage2d;
+use glium::texture::pixel_buffer::PixelBuffer;
+use glium::texture::{MipmapsOption, Texture2d, UncompressedFloatFormat};
 use glium::{implement_vertex, program, uniform};
 use glium::{Display, Surface};
 use glutin::display::{GetGlDisplay, GlDisplay};
@@ -27,11 +28,8 @@ use crate::render_glium::stats::StatsRender;
 #[cfg(not(feature = "stats"))]
 type StatsRender = ();
 
-/// Whether to clear to black each frame.
+/// Whether to clear to black each frame
 const CLEAR_FRAME: bool = false;
-
-/// Whether to recreate the OpenGL texture each frame
-const RECREATE_TEXTURE: bool = false;
 
 type StatsText = Arc<Mutex<String>>;
 
@@ -45,7 +43,10 @@ implement_vertex!(Vertex, position, tex_coords);
 pub struct Application {
     vertex_buffer: glium::VertexBuffer<Vertex>,
     index_buffer: glium::IndexBuffer<u16>,
-    opengl_texture: glium::texture::Texture2d,
+    /// Pixelfut pixel buffer object, used to upload pixel data to GPU much more efficiently
+    image_pbo: PixelBuffer<(u8, u8, u8, u8)>,
+    /// Pixelfut OpenGL texture, used to actually render the image
+    image_texture: Texture2d,
     program: glium::Program,
 }
 
@@ -335,11 +336,12 @@ impl ApplicationContext for Application {
         let width = pixmap.width() as u32;
         let height = pixmap.height() as u32;
 
-        // Create base OpenGL texture
-        let opengl_texture = glium::texture::Texture2d::empty_with_format(
+        // Create pixelflut OpenGL pixel buffer and texture
+        let image_pbo = PixelBuffer::new_empty(display, (width * height) as usize);
+        let image_texture = Texture2d::empty_with_format(
             display,
-            glium::texture::UncompressedFloatFormat::U8U8U8U8,
-            glium::texture::MipmapsOption::NoMipmap,
+            UncompressedFloatFormat::U8U8U8U8,
+            MipmapsOption::NoMipmap,
             width,
             height,
         )
@@ -451,7 +453,8 @@ impl ApplicationContext for Application {
         Self {
             vertex_buffer,
             index_buffer,
-            opengl_texture,
+            image_texture,
+            image_pbo,
             program,
         }
     }
@@ -463,47 +466,31 @@ impl ApplicationContext for Application {
         pixmap: &Pixmap,
         #[cfg_attr(not(feature = "stats"), allow(unused))] stats: &mut StatsRender,
     ) {
+        let width = pixmap.width() as u32;
+        let height = pixmap.height() as u32;
+        let pixels = pixmap.as_u8u8u8u8();
+
+        // Upload new pixels to PBO on GPU
+        self.image_pbo.write(pixels);
+
         #[cfg(feature = "stats")]
         stats.queue_draw(config);
 
         let mut frame = display.draw();
 
-        let width = pixmap.width() as u32;
-        let height = pixmap.height() as u32;
-        let pixels = pixmap.as_bytes();
+        // Load pixels from PBO into texture on GPU
+        self.image_texture
+            .main_level()
+            .raw_upload_from_pixel_buffer(self.image_pbo.as_slice(), 0..width, 0..height, 0..1);
 
-        // Create base OpenGL texture
-        if RECREATE_TEXTURE {
-            self.opengl_texture = glium::texture::Texture2d::empty_with_format(
-                display,
-                glium::texture::UncompressedFloatFormat::U8U8U8U8,
-                glium::texture::MipmapsOption::NoMipmap,
-                width,
-                height,
-            )
-            .unwrap();
-        }
-
-        // Dump new image to OpenGL texture
-        let raw_image = RawImage2d::from_raw_rgba_reversed(pixels, (width, height));
-        self.opengl_texture.write(
-            glium::Rect {
-                left: 0,
-                bottom: 0,
-                width,
-                height,
-            },
-            raw_image,
-        );
-
-        let mut tex_sampler = glium::uniforms::Sampler::new(&self.opengl_texture);
+        // Configure texture sampling
+        let mut tex_sampler = glium::uniforms::Sampler::new(&self.image_texture);
         if config.nearest_neighbor {
             tex_sampler = tex_sampler
                 .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
                 .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest);
         }
 
-        // Building the uniforms
         let uniforms = uniform! {
             matrix: [
                 [1.0, 0.0, 0.0, 0.0],
