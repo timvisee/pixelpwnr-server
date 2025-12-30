@@ -212,10 +212,8 @@ impl StatsRender {
             })
             .collect();
 
-        let x_padding = config.stats_padding_px;
-        let y_padding = config.stats_padding_px;
-        let x_offset_base = config.stats_offset_px.0 + x_padding;
-        let y_offset_base = config.stats_offset_px.1 + y_padding;
+        let x_offset_base = config.stats_offset_px.0 + config.stats_padding_px.0;
+        let y_offset_base = config.stats_offset_px.1 + config.stats_padding_px.1;
 
         let rect_min = Point {
             x: config.stats_offset_px.0 * self.scale_factor as f32,
@@ -256,8 +254,8 @@ impl StatsRender {
         }
 
         let rect_max = Point {
-            x: (max_x.0 + x_padding) * self.scale_factor as f32,
-            y: (max_y.0 + y_padding) * self.scale_factor as f32,
+            x: (max_x.0 + config.stats_padding_px.0) * self.scale_factor as f32,
+            y: (max_y.0 + config.stats_padding_px.1) * self.scale_factor as f32,
         };
 
         Some(Rect {

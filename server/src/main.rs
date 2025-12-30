@@ -214,7 +214,7 @@ fn render(
         stats_font_size_px: arg_handler.stats_font_size,
         stats_offset_px: arg_handler.stats_offset(),
         stats_spacing_px: arg_handler.stats_spacing(),
-        stats_padding_px: arg_handler.stats_padding,
+        stats_padding_px: arg_handler.stats_padding(),
     };
 
     State::<render_glium::Application>::run_loop(

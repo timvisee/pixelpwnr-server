@@ -74,6 +74,7 @@ pub struct Opts {
     /// Screen stats column spacing
     #[clap(
         long,
+        value_name = "XxY",
         alias = "stats-column-spacing",
         alias = "stats-col-spacing",
         default_value = "40x10"
@@ -81,8 +82,8 @@ pub struct Opts {
     stats_spacing: String,
 
     /// Screen stats padding
-    #[clap(long, value_name = "PX", default_value = "20", alias = "padding")]
-    pub stats_padding: f32,
+    #[clap(long, value_name = "XxY", default_value = "20x20", alias = "padding")]
+    stats_padding: String,
 
     /// Custom host to connect to in stats [default: host]
     #[clap(long, value_name = "DISPLAY_HOST")]
@@ -185,6 +186,31 @@ impl Opts {
         }
 
         panic!("Invalid stats spacing");
+    }
+
+    /// Get the stats screen padding
+    pub fn stats_padding(&self) -> (f32, f32) {
+        let lower_case = self.stats_padding.to_lowercase();
+        let parts = lower_case.split("x");
+        let count = parts.clone().count();
+
+        let mut parts = parts
+            .map(|n| n.parse::<f32>().expect("valid number"))
+            .inspect(|n| {
+                if *n < 0.0 || !n.is_finite() {
+                    panic!("stats padding must be a positive number");
+                }
+            });
+
+        if count == 1 {
+            let n = parts.next().unwrap();
+            return (n, n);
+        }
+        if count == 2 {
+            return (parts.next().unwrap(), parts.next().unwrap());
+        }
+
+        panic!("Invalid stats padding");
     }
 }
 

@@ -72,7 +72,7 @@ pub struct Config {
     #[cfg(feature = "stats")]
     pub stats_spacing_px: (f32, f32),
     #[cfg(feature = "stats")]
-    pub stats_padding_px: f32,
+    pub stats_padding_px: (f32, f32),
 }
 
 /// Based upon <https://github.com/glium/glium/blob/master/examples/image.rs>
