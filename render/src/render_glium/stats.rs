@@ -277,6 +277,7 @@ impl StatsRender {
 
         // Calculate background vertex buffer if not set
         if self.bg_vertex_buffer.is_none() {
+            // TODO: fix offset and padding handling
             let w = bounds.x / dims.0 as f32 * 2f32;
             let h = bounds.y / dims.1 as f32 * 2f32;
             let x = -1f32 + (config.stats_offset.0 * self.scale_factor as f32) / dims.0 as f32;
