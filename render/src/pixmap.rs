@@ -2,6 +2,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::color::Color;
 
+/// Whether to flip the Y axis, useful for GPU rendering
+const FLIP_Y: bool = false;
+
 /// A struct representing a pixelmap for pixelflut.
 ///
 /// This struct holds the data for each pixel, and can be concidered a bitmap.
@@ -109,7 +112,11 @@ impl Pixmap {
         }
 
         // Determine the index and return
-        Ok(y * self.dimensions.0 + x)
+        Ok(if FLIP_Y {
+            (self.dimensions.1 - y - 1) * self.dimensions.0 + x
+        } else {
+            y * self.dimensions.0 + x
+        })
     }
 
     /// Get the pixelmap data, as a slice of bytes.
