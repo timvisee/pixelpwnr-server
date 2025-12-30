@@ -8,7 +8,7 @@ server in [Rust][rust].
 * Blazingly fast pixelflut rendering
 * GPU accelerated
 * Highly concurrent, to support many connections
-* Linux, Windows and macOS
+* Linux (Xorg, Wayland), Windows and macOS
 * Optional binary PX command for reduced bandwidth requirements (enabled by default).
 
 ## Installation

@@ -65,11 +65,11 @@ impl Stats {
             Standalone(b) => format!("{:.00} P", b.ceil()),
             Prefixed(p, n) => {
                 if n < 10f64 {
-                    format!("{:.02} {}P", n, p)
+                    format!("{n:.02} {p}P")
                 } else if n < 100f64 {
-                    format!("{:.01} {}P", n, p)
+                    format!("{n:.01} {p}P")
                 } else {
-                    format!("{:.00} {}P", n, p)
+                    format!("{n:.00} {p}P")
                 }
             }
         }
@@ -97,11 +97,11 @@ impl Stats {
                 Standalone(b) => format!("{:.00} P/s", b.ceil()),
                 Prefixed(p, n) => {
                     if n < 10f64 {
-                        format!("{:.02} {}P/s", n, p)
+                        format!("{n:.02} {p}P/s")
                     } else if n < 100f64 {
-                        format!("{:.01} {}P/s", n, p)
+                        format!("{n:.01} {p}P/s")
                     } else {
-                        format!("{:.00} {}P/s", n, p)
+                        format!("{n:.00} {p}P/s")
                     }
                 }
             },
@@ -142,11 +142,11 @@ impl Stats {
             Standalone(b) => format!("{:.00} B", b.ceil()),
             Prefixed(p, n) => {
                 if n < 10f64 {
-                    format!("{:.02} {}B", n, p)
+                    format!("{n:.02} {p}B")
                 } else if n < 100f64 {
-                    format!("{:.01} {}B", n, p)
+                    format!("{n:.01} {p}B")
                 } else {
-                    format!("{:.00} {}B", n, p)
+                    format!("{n:.00} {p}B")
                 }
             }
         }
@@ -174,11 +174,11 @@ impl Stats {
                 Standalone(b) => format!("{:.00} b/s", b.ceil()),
                 Prefixed(p, n) => {
                     if n < 10f64 {
-                        format!("{:.02} {}b/s", n, p)
+                        format!("{n:.02} {p}b/s")
                     } else if n < 100f64 {
-                        format!("{:.01} {}b/s", n, p)
+                        format!("{n:.01} {p}b/s")
                     } else {
-                        format!("{:.00} {}b/s", n, p)
+                        format!("{n:.00} {p}b/s")
                     }
                 }
             },

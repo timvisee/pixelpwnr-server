@@ -291,7 +291,7 @@ where
                         Ok(cmd) => cmd,
                         Err(e) => {
                             // Report the error to the client
-                            self.buffer(format!("ERR {}\r\n", e).as_bytes(), cx);
+                            self.buffer(format!("ERR {e}\r\n").as_bytes(), cx);
                             break Some("Command decoding failed".to_string());
                         }
                     };
@@ -331,8 +331,8 @@ where
                 // Report the error to the user
                 CmdResult::ClientErr(err) => {
                     // Report the error to the client
-                    self.buffer(format!("ERR {}\r\n", err).as_bytes(), cx);
-                    break Some(format!("Client error: {}", err));
+                    self.buffer(format!("ERR {err}\r\n").as_bytes(), cx);
+                    break Some(format!("Client error: {err}"));
                 }
 
                 // Quit the connection

@@ -2,6 +2,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::color::Color;
 
+/// Whether to flip the Y axis, useful for GPU rendering
+const FLIP_Y: bool = true;
+
 /// A struct representing a pixelmap for pixelflut.
 ///
 /// This struct holds the data for each pixel, and can be concidered a bitmap.
@@ -80,14 +83,14 @@ impl Pixmap {
     }
 
     /// Get the pixel at the given coordinate, as color.
-    pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr> {
+    pub fn pixel(&self, x: usize, y: usize) -> Result<Color, PixmapErr<'_>> {
         let pixel_index = self.pixel_index(x, y)?;
         let pixel_value = self.map[pixel_index].load(Ordering::Relaxed);
         Ok(Color::new(pixel_value))
     }
 
     /// Set the pixel at the given coordinate, to the given color.
-    pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr> {
+    pub fn set_pixel(&self, x: usize, y: usize, color: Color) -> Result<(), PixmapErr<'_>> {
         let pixel_index = self.pixel_index(x, y)?;
 
         // A data race can occur here: if two separate threads update the pixel at the same time,
@@ -100,7 +103,7 @@ impl Pixmap {
     }
 
     /// Get the index a pixel is at, for the given coordinate.
-    fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr> {
+    fn pixel_index(&self, x: usize, y: usize) -> Result<usize, PixmapErr<'_>> {
         // Check pixel bounds
         if x >= self.dimensions.0 {
             return Err(PixmapErr::OutOfBound("x coordinate out of bound"));
@@ -109,7 +112,11 @@ impl Pixmap {
         }
 
         // Determine the index and return
-        Ok(y * self.dimensions.0 + x)
+        Ok(if FLIP_Y {
+            (self.dimensions.1 - y - 1) * self.dimensions.0 + x
+        } else {
+            y * self.dimensions.0 + x
+        })
     }
 
     /// Get the pixelmap data, as a slice of bytes.
@@ -119,7 +126,7 @@ impl Pixmap {
     ///
     /// This data may be used to send to the GPU, as raw texture buffer, for
     /// rendering.
-    pub fn as_bytes(&mut self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         let map = &self.map;
 
         let len = map.len() * 4;
@@ -143,8 +150,27 @@ impl Pixmap {
         // Because we are borrowing `self` for 'me (by means of a mutable borrow),
         // we can safely create an immutable slice of the memory that we're
         // pointing to that for 'me.
-        let slice = unsafe { core::slice::from_raw_parts(ptr, len) };
-        slice
+        unsafe { core::slice::from_raw_parts(ptr, len) }
+    }
+
+    /// Get the pixelmap data, as a slice of (u8, u8, u8, u8).
+    ///
+    /// Each pixel consumes a sequence of 4 bytes, each defining the value of
+    /// a different color channel.
+    ///
+    /// This data may be used to send to the GPU, as raw texture buffer, for
+    /// rendering.
+    pub fn as_u8u8u8u8(&self) -> &[(u8, u8, u8, u8)] {
+        let map = &self.map;
+
+        // We get a pointer to the start of the U32 list
+        //
+        // Casting *const AtomicU32 to *const u32 is OK because Atomicu32
+        // has the same in-memory representation as u32
+        let ptr = map.as_ptr() as *const u32 as *const (u8, u8, u8, u8);
+
+        // We create the slice from the pointer
+        unsafe { core::slice::from_raw_parts(ptr, map.len()) }
     }
 }
 

@@ -37,7 +37,7 @@ pub struct StatReporter {
     stats: Arc<Stats>,
 
     /// A string mutex for text on the screen.
-    screen: Arc<Option<Arc<Mutex<String>>>>,
+    pub(crate) screen: Arc<Mutex<String>>,
 
     host: String,
     port: u16,
@@ -52,7 +52,6 @@ impl StatReporter {
         save_interval: Option<Duration>,
         save_path: Option<PathBuf>,
         stats: Arc<Stats>,
-        screen: Option<Arc<Mutex<String>>>,
         host: String,
         port: u16,
     ) -> Self {
@@ -65,7 +64,7 @@ impl StatReporter {
             stdout_last: Arc::new(Mutex::new(None)),
             save_last: Arc::new(Mutex::new(None)),
             stats,
-            screen: Arc::new(screen),
+            screen: Arc::new(Mutex::new(String::new())),
             host,
             port,
         }
@@ -111,10 +110,8 @@ impl StatReporter {
 
                     // Report stats to the screen
                     if last.is_none() || elapsed >= interval {
-                        if let Some(ref screen) = *screen {
-                            Self::report_screen(&stats, screen, &host, port);
-                            *last = Some(SystemTime::now());
-                        }
+                        Self::report_screen(&stats, &screen, &host, port);
+                        *last = Some(SystemTime::now());
                     }
 
                     // See how long we should take, update the next update time
@@ -189,12 +186,10 @@ impl StatReporter {
     /// Report the stats to the screen.
     fn report_screen(stats: &Arc<Stats>, screen: &Arc<Mutex<String>>, host: &str, port: u16) {
         *screen.lock() = format!(
-            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet {} {}        \tin:\t{}\t{}",
+            "CONNECT WITH:        \tpx:\t{}\t{}\tclients: {}\ntelnet {host} {port}        \tin:\t{}\t{}",
             stats.pixels_human(),
             stats.pixels_sec_human(),
             stats.clients(),
-            host,
-            port,
             stats.bytes_read_human(),
             stats.bytes_read_sec_human(),
         );

@@ -16,7 +16,10 @@ use std::{
 };
 
 use clap::StructOpt;
-use pixelpwnr_render::{Pixmap, Renderer};
+use pixelpwnr_render::{
+    render_glium::{self, State},
+    Pixmap,
+};
 use tokio::net::{TcpListener, TcpStream};
 
 use codec::{CodecOptions, Lines};
@@ -42,7 +45,7 @@ fn main() {
 
     let (width, height) = arg_handler.size();
     let pixmap = Arc::new(Pixmap::new(width, height));
-    println!("Canvas size: {}x{}", width, height);
+    println!("Canvas size: {width}x{height}");
 
     // Create a new runtime to be ran on a different (set of) OS threads
     // so that we don't block the runtime by running the renderer on it
@@ -68,9 +71,9 @@ fn main() {
     let host = arg_handler.host;
     let listener = match std::net::TcpListener::bind(host) {
         Ok(v) => v,
-        Err(e) => panic!("Failed to bind to address {:?}. Error: {:?}", &host, e),
+        Err(e) => panic!("Failed to bind to address {host:?}. Error: {e:?}"),
     };
-    println!("Listening on: {}", host);
+    println!("Listening on: {host}");
 
     let net_pixmap = pixmap.clone();
     let net_stats = stats.clone();
@@ -122,11 +125,9 @@ async fn spawn_save_image(dir: PathBuf, pixmap: Arc<Pixmap>, interval: Duration)
             .as_secs();
 
         let mut path = dir.clone();
-        path.push(format!("{}.png", now));
+        path.push(format!("{now}.png"));
 
         let (width, height) = pixmap.dimensions();
-
-        let mut pixmap = (*pixmap).clone();
 
         image::save_buffer(
             path,
@@ -152,11 +153,11 @@ fn handle_socket(
     let addr = match socket.peer_addr() {
         Ok(addr) => addr,
         Err(err) => {
-            eprintln!("Failed to get remote address: {}", err);
+            eprintln!("Failed to get remote address: {err}");
             return; // Terminate the function gracefully
         }
     };
-    println!("A client connected (from: {})", addr);
+    println!("A client connected (from: {addr})");
 
     // Increase the number of clients
     stats.inc_clients();
@@ -177,7 +178,7 @@ fn handle_socket(
         let result = lines.await;
 
         // Print a disconnect message
-        println!("A client disconnected (from: {}). Reason: {}", addr, result);
+        println!("A client disconnected (from: {addr}). Reason: {result}");
 
         // Decreasde the client connections number
         disconnect_stats.dec_clients();
@@ -189,14 +190,8 @@ fn render(
     arg_handler: &Opts,
     pixmap: Arc<Pixmap>,
     stats: Arc<Stats>,
-    net_running: Arc<AtomicBool>,
+    _net_running: Arc<AtomicBool>,
 ) {
-    // Build the renderer
-    let renderer = Renderer::new(env!("CARGO_PKG_NAME"), pixmap);
-
-    // Borrow the statistics text
-    let stats_text = renderer.stats().text();
-
     // Define host to render
     let host = arg_handler.stats_host.unwrap_or(arg_handler.host);
     let (host, port) = (host.ip().to_string(), host.port());
@@ -208,20 +203,24 @@ fn render(
         arg_handler.stats_save_interval(),
         arg_handler.stats_file.clone(),
         stats,
-        Some(stats_text),
         host,
         port,
     );
     reporter.start();
 
-    // Render the canvas
-    renderer.run(
-        arg_handler.fullscreen,
-        arg_handler.nearest_neighbor,
-        arg_handler.stats_font_size,
-        arg_handler.stats_offset(),
-        arg_handler.stats_padding,
-        arg_handler.stats_col_spacing,
-        net_running,
+    let render_config = render_glium::Config {
+        fullscreen: arg_handler.fullscreen,
+        nearest_neighbor: arg_handler.nearest_neighbor,
+        stats_font_size_px: arg_handler.stats_font_size,
+        stats_offset_px: arg_handler.stats_offset(),
+        stats_spacing_px: arg_handler.stats_spacing(),
+        stats_padding_px: arg_handler.stats_padding(),
+    };
+
+    State::<render_glium::Application>::run_loop(
+        format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+        render_config,
+        pixmap.clone(),
+        reporter.screen.clone(),
     );
 }

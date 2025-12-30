@@ -4,10 +4,10 @@ use std::time::{Duration, Instant};
 const FRAME_BUFFER_MAX: usize = 512;
 
 /// The maximum time in milliseconds a frame time is remembered.
-const FRAME_TTL: Duration = Duration::from_millis(5000);
+const FRAME_TTL: Duration = Duration::from_millis(10_000);
 
 /// The interval in milliseconds to report the FPS count at to the console.
-const REPORT_INTERVAL: Duration = Duration::from_millis(1000);
+const REPORT_INTERVAL: Duration = Duration::from_millis(5_000);
 
 /// The minimum number of frames to collect before the first report.
 const REPORT_FIRST_FRAMES_MIN: usize = 5;
@@ -106,7 +106,7 @@ impl FpsCounter {
         // Calculate the FPS
         if let Some(fps) = self.calculate_fps() {
             // Report the FPS
-            println!("FPS: {:.1}", fps);
+            println!("FPS: {fps:.1}");
 
             // Set the last report time
             self.last_report = Some(Instant::now());
