@@ -16,34 +16,16 @@ server in [Rust][rust].
 For installation, Git and Rust cargo are required.
 Install the latest version of Rust with [rustup][rustup].
 
-Then, clone and install `pixelpwnr-server` with:
+Then, just install from the repository:
 ```bash
-# Clone the project
-git clone https://github.com/timvisee/pixelpwnr-server.git
-cd pixelpwnr-server
-
-# Install pixelpwnr server
-cargo install --path server -f
-
-# Start using pixelpwnr server
-pixelpwnr-server --help
-
-# or run it directly from Cargo
-cargo run --release -- --help
+cargo install --git https://github.com/timvisee/pixelpwnr-server.git
 ```
 
-Or just build it and invoke the binary directly (Linux/macOS):
+Then run the server and have fun:
 ```bash
-# Clone the project
-git clone https://github.com/timvisee/pixelpwnr-server.git
-cd pixelpwnr-server
-
-# Build the project (release version)
-cargo build --release
-
-# Start using pixelpwnr-server
-./target/release/pixelpwnr-server --help
+pixelpwnr-server
 ```
+
 ## The binary PX command
 
 This implementation adds a new command to the protocol. 
